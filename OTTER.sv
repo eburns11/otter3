@@ -117,11 +117,13 @@ module OTTER(
     CU_DCDR OTTER_DCDR(.IR_30(ir30), .IR_OPCODE(opcode), .IR_FUNCT(funct), .BR_EQ(br_eq), .BR_LT(br_lt),
      .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source),
       .RF_WR_SEL(rf_wr_sel));
-    
-    //Instantiate FSM, connect all relevant I/O
-    CU_FSM OTTER_FSM(.CLK(CLK), .RST(RST), .IR_OPCODE(opcode), 
-        .PC_WRITE(pc_write), .REG_WRITE(reg_wr), .MEM_WE2(mem_we2), 
-        .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), .rst(pc_rst));
+
+    pc_write = 0; //if branch or jump?
+    reg_wr = 0; //if writeback
+    mem_we2 = 0; //if store
+    mem_rden1 = 1; //always read an instruction?!?
+    mem_rden2 = 1; //always read cus mux? or turn it off if not accessing?
+    pc_rst = 0; //if reset
     
 endmodule
 

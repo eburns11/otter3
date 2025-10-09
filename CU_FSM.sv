@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+/*`timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
 // Company: California Polytechnic University, San Luis Obispo
 // Engineer: Diego Renato Curiel
@@ -129,3 +129,4 @@ module CU_FSM(
     end
     
 endmodule
+*/

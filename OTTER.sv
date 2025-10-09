@@ -15,7 +15,27 @@ module OTTER(
     output logic [31:0] IOBUS_ADDR
     );
 
-
+    typedef struct packed{
+    opcode_t opcode;
+    logic [4:0] rs1_addr;
+    logic [4:0] rs2_addr;
+    logic [4:0] rd_addr;
+    logic rs1_used;
+    logic rs2_used;
+    logic rd_used;
+    logic [3:0] alu_fun;
+    logic memWrite;
+    logic memRead2;
+    logic regWrite;
+    logic [1:0] rf_wr_sel;
+    logic [2:0] mem_type;  //sign, size
+    logic [31:0] pc;
+    logic [31:0] ir;
+    logic [31:0] ALU_Op_A;
+    logic [31:0] ALU_Op_B;
+    logic [31:0] Jtype;
+    logic [31:0] Btype;
+    } instr_t;
 
         
     

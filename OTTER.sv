@@ -20,6 +20,7 @@ module OTTER(
     logic [4:0] rs1_addr;
     logic [4:0] rs2_addr;
     logic [4:0] rd_addr;
+    logic [31:0] rs1_data;
     logic rs1_used;
     logic rs2_used;
     logic rd_used;
@@ -29,25 +30,19 @@ module OTTER(
     logic regWrite;
     logic [1:0] rf_wr_sel;
     logic [2:0] mem_type;  //sign, size
-    logic [31:0] pc;
     logic [31:0] ir;
+    logic [31:0] pc_inc;
     logic [31:0] ALU_Op_A;
     logic [31:0] ALU_Op_B;
     logic [31:0] Jtype;
     logic [31:0] Btype;
     } instr_t;
 
-        
     
-    
-
-
-    pc_write = 0; //if branch or jump?
     reg_wr = 0; //if writeback
     mem_we2 = 0; //if store
-    mem_rden1 = 1; //always read an instruction?!?
+    
     mem_rden2 = 1; //always read cus mux? or turn it off if not accessing?
-    pc_rst = 0; //if reset
     
     //NOTE ABOUT METHODOLOGY FOR CREATING TOP-LEVEL MODULE:
     //I decided to look at the OTTER diagram and create logic (connecting wires)
@@ -58,22 +53,32 @@ module OTTER(
     //the process simpler, and allowed for me to create a "flow" in the SystemVerilog code.
     //I did my best to keep the name of my lgoic consistent to the names that are in the OTTER
     //diagram, and made all interconnecting wires lowercase so as to not confuse them with I/O.
+            //this was already here right? delete it?
 
 ///////////////////////////////////////////////////
 // Instruction Fetch
 
     //Create logic for PC; connecting wires to Memory module and RegFile Mux
-    logic pc_rst, pc_write;
+    logic ir;
+    logic pc_rst, pc_write;   //wired
     logic [2:0] pc_source;
-    logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;
+    logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;   //pc_out wired
+
+    instr_t if_pipe_reg;  //stores the pc
+
+    assign pc_write = 1; //always go to the next instruction
+    assign mem_rden1 = 1; //always read an instruction?!?
+    assign pc_rst = RST;
+
+    always_ff @(posedge CLK) begin
+        if_pipe_reg.ir <= ir;  //always store the next instruction into the IF pc register
+        if_pipe_reg.pc_inc <= pc_out_inc;
+    end
     
     //Instantiate the PC and connect relevant I/O
     PC OTTER_PC(.CLK(CLK), .RST(pc_rst), .PC_WRITE(pc_write), .PC_SOURCE(pc_source),
         .JALR(jalr), .JAL(jal), .BRANCH(branch), .MTVEC(32'b0), .MEPC(32'b0),
         .PC_OUT(pc_out), .PC_OUT_INC(pc_out_inc));
-
-
-
 
 
 ///////////////////////////////////////////////////
@@ -82,31 +87,39 @@ module OTTER(
 
 //Create logic for FSM and Decoder
     logic ir30;
-    assign ir30 = ir[30];
+    assign ir30 = if_pipe_reg.ir[30];
     logic [6:0] opcode;
-    assign opcode = ir[6:0];
+    assign opcode = if_pipe_reg.ir[6:0];
     logic [2:0] funct;
-    assign funct = ir[14:12]; 
+    assign funct = if_pipe_reg.ir[14:12];
+
+    instr_t de_pipe_reg;
+
+    always_ff @(posedge CLK) begin
+        de_pipe_reg.pc_inc <= if_pipe_reg.pc_inc;
+        de_pipe_reg.rs1 <= rs1_data;
+        //needs more still
+    end
     
     
     
     //Instantiate Decoder, connect all relevant I/O
     CU_DCDR OTTER_DCDR(.IR_30(ir30), .IR_OPCODE(opcode), .IR_FUNCT(funct), .BR_EQ(br_eq), .BR_LT(br_lt),
      .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source),
-      .RF_WR_SEL(rf_wr_sel));
+      .RF_WR_SEL(rf_wr_sel));  //i think the whole decoder has to be redone lowk?
 
 //Create logic for the RegFile, Immediate Generator, Branch Addresss 
     //Generator, and ALU MUXes     
     logic reg_wr;
     logic [1:0] rf_wr_sel;
     logic [4:0] reg_adr1;
-    assign reg_adr1 = ir[19:15]; 
+    assign reg_adr1 = if_pipe_reg.ir[19:15];
     logic [4:0] reg_adr2;
-    assign reg_adr2 = ir[24:20]; 
+    assign reg_adr2 = if_pipe_reg.ir[24:20];
     logic [4:0] reg_wa;
-    assign reg_wa = ir[11:7];
+    assign reg_wa = if_pipe_reg.ir[11:7];
     logic [24:0] imgen_ir;
-    assign imgen_ir = ir[31:7];
+    assign imgen_ir = if_pipe_reg.ir[31:7];
     logic [31:0] wd, rs1;
     
     //Instantiate RegFile, connect all relevant I/O    
@@ -188,4 +201,3 @@ module OTTER(
     
     
 endmodule
-

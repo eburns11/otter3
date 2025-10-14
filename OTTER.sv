@@ -6,16 +6,20 @@
 // Module Name: OTTER
 //////////////////////////////////////////////////////////////////////////////////
 
-module OTTER(
-    input logic RST,
-    input logic [31:0] IOBUS_IN,
-    input logic CLK,
-    output logic IOBUS_WR,
-    output logic [31:0] IOBUS_OUT,
-    output logic [31:0] IOBUS_ADDR
-    );
+typedef enum logic [6:0] {
+    LUI      = 7'b0110111,
+    AUIPC    = 7'b0010111,
+    JAL      = 7'b1101111,
+    JALR     = 7'b1100111,
+    BRANCH   = 7'b1100011,
+    LOAD     = 7'b0000011,
+    STORE    = 7'b0100011,
+    OP_IMM   = 7'b0010011,
+    OP       = 7'b0110011,
+    SYSTEM   = 7'b1110011
+} opcode_t;
 
-    typedef struct packed{
+typedef struct packed{
     opcode_t opcode;
     logic [4:0] rs1_addr;
     logic [4:0] rs2_addr;
@@ -32,13 +36,21 @@ module OTTER(
     logic [2:0] mem_type;  //sign, size
     logic [31:0] ir;
     logic [31:0] pc_inc;
+    logic [2:0] pc_src;
     logic [31:0] ALU_Op_A;
     logic [31:0] ALU_Op_B;
-    logic [31:0] Jtype;
-    logic [31:0] Btype;
-    } instr_t;
+    logic [31:0] immediate;
+} instr_t;
 
-    
+module OTTER(
+    input logic RST,
+    input logic [31:0] IOBUS_IN,
+    input logic CLK,
+    output logic IOBUS_WR,
+    output logic [31:0] IOBUS_OUT,
+    output logic [31:0] IOBUS_ADDR
+    );
+  
     reg_wr = 0; //if writeback
     mem_we2 = 0; //if store
     
@@ -72,7 +84,7 @@ module OTTER(
 
     always_ff @(posedge CLK) begin
         if_pipe_reg.ir <= ir;  //always store the next instruction into the IF pc register
-        if_pipe_reg.pc_inc <= pc_out_inc;
+        if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
     end
     
     //Instantiate the PC and connect relevant I/O
@@ -96,17 +108,42 @@ module OTTER(
     instr_t de_pipe_reg;
 
     always_ff @(posedge CLK) begin
-        de_pipe_reg.pc_inc <= if_pipe_reg.pc_inc;
-        de_pipe_reg.rs1 <= rs1_data;
-        //needs more still
+        de_pipe_reg.pc_inc <= if_pipe_reg.pc_inc;  //move the pc along
+        de_pipe_reg.opcode <= opcode;  //store the opcode
+        de_pipe_reg.rs1_data <= rs1;  //store register 1 data
+        de_pipe_reg.rd_addr <= reg_wa;  //store dest register addr
+        de_pipe_reg.rs1_addr <= reg_adr1;  //store reg 1 addr
+        de_pipe_reg.rs2_addr <= reg_adr2;  //store reg 2 addr
+        de_pipe_reg.alu_fun <= alu_fun;  //store alu fun
+        de_pipe_reg.ALU_Op_A <= alu_src_a;  //store alu source a
+        de_pipe_reg.ALU_Op_B <= alu_src_b;  //store alu source b
+        de_pipe_reg.pc_src <= pc_source;  //store the pc source
+        de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
+
+        case(opcode_t'(opcode))  //store the immediate value
+            LUI : de_pipe_reg.immediate <= Utype;
+            AUIPC : de_pipe_reg.immediate <= Utype;
+            JAL : de_pipe_reg.immediate <= Jtype;
+            JALR : de_pipe_reg.immediate <= Jtype;
+            BRANCH : de_pipe_reg.immediate <= Btype;
+            LOAD : de_pipe_reg.immediate <= Itype;
+            STORE : de_pipe_reg.immediate <= Stype;
+            OP_IMM : de_pipe_reg.immediate <= Itype;
+            default : de_pipe_reg.immediate <= 0;
+        endcase
     end
+
+    //Create logic for Branch Condition Generator
+    logic br_eq, br_lt, br_ltu;    
     
-    
+    //Instantiate Branch Condition Generator, connect all 
+    //relevant I/O
+    BCG OTTER_BCG(.RS1(rs1), .RS2(IOBUS_OUT), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu));
     
     //Instantiate Decoder, connect all relevant I/O
     CU_DCDR OTTER_DCDR(.IR_30(ir30), .IR_OPCODE(opcode), .IR_FUNCT(funct), .BR_EQ(br_eq), .BR_LT(br_lt),
      .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source),
-      .RF_WR_SEL(rf_wr_sel));  //i think the whole decoder has to be redone lowk?
+      .RF_WR_SEL(rf_wr_sel));  //needs to be modified for forwarding only I think
 
 //Create logic for the RegFile, Immediate Generator, Branch Addresss 
     //Generator, and ALU MUXes     
@@ -125,17 +162,13 @@ module OTTER(
     //Instantiate RegFile, connect all relevant I/O    
     REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(reg_wr), .ADR1(reg_adr1), .ADR2(reg_adr2), .WA(reg_wa), 
         .WD(wd), .RS1(rs1), .RS2(IOBUS_OUT));
-    
+
     //Create logic for Immediate Generator outputs and BAG and ALU MUX inputs    
     logic [31:0] Utype, Itype, Stype, Btype, Jtype;
     
     //Instantiate Immediate Generator, connect all relevant I/O
     ImmediateGenerator OTTER_IMGEN(.IR(imgen_ir), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
         .B_TYPE(Btype), .J_TYPE(Jtype));
-
-
-
-
 
 
 //////////////////////////////////////////////////
@@ -147,24 +180,24 @@ module OTTER(
     logic [1:0] alu_src_b;
     logic [3:0] alu_fun;
     logic [31:0] srcA, srcB;
+
+    instr_t ex_pipe_reg;
+
+    always_ff @(posedge CLK) begin
+        ex_pipe_reg.pc_inc <= de_pipe_reg.pc_inc;
+        ex_pipe_reg.opcode <= 
+    end
     
     //Instantiate ALU two-to-one Mux, ALU four-to-one MUX,
-    //and ALU; connect all relevant I/O     
-    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(alu_src_a), .RS1(rs1), .U_TYPE(Utype), .SRC_A(srcA));
-    FourMux OTTER_ALU_MUXB(.SEL(alu_src_b), .ZERO(IOBUS_OUT), .ONE(Itype), .TWO(Stype), .THREE(pc_out), .OUT(srcB));
-    ALU OTTER_ALU(.SRC_A(srcA), .SRC_B(srcB), .ALU_FUN(alu_fun), .RESULT(IOBUS_ADDR));
+    //and ALU; connect all relevant I/O
+    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.alu_src_a), .RS1(de_pipe_reg.rs1_data), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
+    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.alu_src_b), .ZERO(IOBUS_OUT), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
+    ALU OTTER_ALU(.SRC_A(srcA), .SRC_B(srcB), .ALU_FUN(de_pipe_reg.alu_fun), .RESULT(IOBUS_ADDR));
 
 
 //Instantiate Branch Address Generator, connect all relevant I/O    
-    BAG OTTER_BAG(.RS1(rs1), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(pc_out),
+    BAG OTTER_BAG(.RS1(de_pipe_reg.rs1_data), .I_TYPE(de_pipe_reg.immediate), .J_TYPE(de_pipe_reg.immediate), .B_TYPE(de_pipe_reg.immediate), .FROM_PC(de_pipe_reg.pc_inc),
          .JAL(jal), .JALR(jalr), .BRANCH(branch));
-
-//Create logic for Branch Condition Generator
-    logic br_eq, br_lt, br_ltu;    
-    
-    //Instantiate Branch Condition Generator, connect all 
-    //relevant I/O
-    BCG OTTER_BCG(.RS1(rs1), .RS2(IOBUS_OUT), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu));
 
 
 //////////////////////////////////////////////////

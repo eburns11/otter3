@@ -25,6 +25,7 @@ typedef struct packed{
     logic [4:0] rs2_addr;
     logic [4:0] rd_addr;
     logic [31:0] rs1_data;
+    logic [31:0] rs2_data;
     logic rs1_used;
     logic rs2_used;
     logic rd_used;
@@ -70,6 +71,26 @@ module OTTER(
     logic reg_wr;
     logic mem_we2;
     logic mem_rden2;
+    logic mem_rden1;
+    logic pc_rst, pc_write;   //wired
+    logic [31:0] ir;
+    logic [2:0] pc_source;
+    logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;   //pc_out wired
+    logic [31:0] wd, rs1;
+    logic [2:0] funct;
+    logic [6:0] opcode;
+    logic ir30;
+    logic [1:0] rf_wr_sel;
+    logic [4:0] reg_adr1;
+    logic [24:0] imgen_ir;
+    logic [4:0] reg_wa;
+    logic [4:0] reg_adr2;
+    logic [1:0] alu_src_a;
+    logic [1:0] alu_src_b;
+    logic [3:0] alu_fun;
+    logic [31:0] srcA, srcB;
+    logic br_eq, br_lt, br_ltu;
+    logic [31:0] Utype, Itype, Stype, Btype, Jtype;
 
     //assign reg_wr = mem_pipe_reg.regWrite;
     assign reg_wr = 1;
@@ -91,10 +112,7 @@ module OTTER(
 // Instruction Fetch
 
     //Create logic for PC; connecting wires to Memory module and RegFile Mux
-    logic pc_rst, pc_write;   //wired
-    logic [31:0] ir;
-    logic [2:0] pc_source;
-    logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;   //pc_out wired
+
 
 
     assign pc_write = 1; //always go to the next instruction
@@ -117,11 +135,9 @@ module OTTER(
 
 
 //Create logic for FSM and Decoder
-    logic ir30;
+    
     assign ir30 = if_pipe_reg.ir[30];
-    logic [6:0] opcode;
     assign opcode = if_pipe_reg.ir[6:0];
-    logic [2:0] funct;
     assign funct = if_pipe_reg.ir[14:12];
 
 
@@ -153,7 +169,7 @@ module OTTER(
     end
 
     //Create logic for Branch Condition Generator
-    logic br_eq, br_lt, br_ltu;    
+        
     
     //Instantiate Branch Condition Generator, connect all 
     //relevant I/O
@@ -166,24 +182,19 @@ module OTTER(
 
 //Create logic for the RegFile, Immediate Generator, Branch Addresss 
     //Generator, and ALU MUXes     
-    logic reg_wr;
-    logic [1:0] rf_wr_sel;
-    logic [4:0] reg_adr1;
+
     assign reg_adr1 = if_pipe_reg.ir[19:15];
-    logic [4:0] reg_adr2;
     assign reg_adr2 = if_pipe_reg.ir[24:20];
-    logic [4:0] reg_wa;
     assign reg_wa = if_pipe_reg.ir[11:7];
-    logic [24:0] imgen_ir;
     assign imgen_ir = if_pipe_reg.ir[31:7];
-    logic [31:0] wd, rs1;
+    
     
     //Instantiate RegFile, connect all relevant I/O    
     REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(reg_wr), .ADR1(reg_adr1), .ADR2(reg_adr2), .WA(reg_wa), 
         .WD(wb_data), .RS1(rs1), .RS2(IOBUS_OUT));
 
     //Create logic for Immediate Generator outputs and BAG and ALU MUX inputs    
-    logic [31:0] Utype, Itype, Stype, Btype, Jtype;
+ 
     
     //Instantiate Immediate Generator, connect all relevant I/O
     ImmediateGenerator OTTER_IMGEN(.IR(imgen_ir), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
@@ -195,10 +206,7 @@ module OTTER(
 
 
 //Create logic for ALU
-    logic alu_src_a;
-    logic [1:0] alu_src_b;
-    logic [3:0] alu_fun;
-    logic [31:0] srcA, srcB;
+
 
 
     always_ff @(posedge CLK) begin
@@ -227,11 +235,11 @@ module OTTER(
     //Immediate Generator, and RegFile Mux    
     logic [13:0] addr1;
     assign addr1 = pc_out[15:2];
-    logic mem_rden1;
+    
     logic [31:0] dout2;
 
     logic sign;
-    assign sign = ex_pipe_reg.mem_type[22];
+    assign sign = ex_pipe_reg.mem_type[2];
     logic [1:0] size;
     assign size = ex_pipe_reg.mem_type[1:0];
     

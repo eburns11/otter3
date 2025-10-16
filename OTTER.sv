@@ -85,7 +85,7 @@ module OTTER(
     logic [24:0] imgen_ir;
     logic [4:0] reg_wa;
     logic [4:0] reg_adr2;
-    logic [1:0] alu_src_a;
+    logic alu_src_a;
     logic [1:0] alu_src_b;
     logic [3:0] alu_fun;
     logic [31:0] srcA, srcB;
@@ -243,7 +243,7 @@ module OTTER(
     logic [1:0] size;
     assign size = ex_pipe_reg.mem_type[1:0];
     
-    //Instantiate the Memory module and connect relevant I/O    
+    // the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 
         .MEM_WE2(mem_we2), .MEM_ADDR1(addr1), .MEM_ADDR2(IOBUS_ADDR), .MEM_DIN2(IOBUS_OUT), .MEM_SIZE(size),
          .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2));

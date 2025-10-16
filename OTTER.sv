@@ -40,7 +40,10 @@ typedef struct packed{
     logic [31:0] ALU_Op_A;
     logic [31:0] ALU_Op_B;
     logic [31:0] immediate;
+    logic [31:0] alu_result;
+    logic [31:0] mem_rdata; //data read from mem
 } instr_t;
+
 
 module OTTER(
     input logic RST,
@@ -50,11 +53,22 @@ module OTTER(
     output logic [31:0] IOBUS_OUT,
     output logic [31:0] IOBUS_ADDR
     );
-  
-    reg_wr = 0; //if writeback
-    mem_we2 = 0; //if store
-    
-    mem_rden2 = 1; //always read cus mux? or turn it off if not accessing?
+
+    instr_t if_pipe_reg; // P1
+    instr_t de_pipe_reg; // P2
+    instr_t ex_pipe_reg; // P3
+    instr_t mem_pipe_reg; // P4
+
+
+
+    logic [31:0] wb_data;
+    logic reg_wr;
+    logic mem_we2;
+    logic mem_rden2;
+
+    assign reg_wr = mem_pipe_reg.regWrite;
+    assign mem_we2 = 0; //if store
+    assign mem_rden2 = 1; //always read cus mux? or turn it off if not accessing? ... OK for now. 
     
     //NOTE ABOUT METHODOLOGY FOR CREATING TOP-LEVEL MODULE:
     //I decided to look at the OTTER diagram and create logic (connecting wires)
@@ -71,12 +85,11 @@ module OTTER(
 // Instruction Fetch
 
     //Create logic for PC; connecting wires to Memory module and RegFile Mux
-    logic ir;
     logic pc_rst, pc_write;   //wired
+    logic [31:0] ir;
     logic [2:0] pc_source;
     logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;   //pc_out wired
 
-    instr_t if_pipe_reg;  //stores the pc
 
     assign pc_write = 1; //always go to the next instruction
     assign mem_rden1 = 1; //always read an instruction?!?
@@ -105,12 +118,12 @@ module OTTER(
     logic [2:0] funct;
     assign funct = if_pipe_reg.ir[14:12];
 
-    instr_t de_pipe_reg;
 
     always_ff @(posedge CLK) begin
         de_pipe_reg.pc_inc <= if_pipe_reg.pc_inc;  //move the pc along
-        de_pipe_reg.opcode <= opcode;  //store the opcode
+        de_pipe_reg.opcode <= opcode_t'(opcode);  //store the opcode
         de_pipe_reg.rs1_data <= rs1;  //store register 1 data
+        de_pipe_reg.rs2_data <= IOBUS_OUT;  // IOBUS_OUT used for rs2
         de_pipe_reg.rd_addr <= reg_wa;  //store dest register addr
         de_pipe_reg.rs1_addr <= reg_adr1;  //store reg 1 addr
         de_pipe_reg.rs2_addr <= reg_adr2;  //store reg 2 addr
@@ -161,7 +174,7 @@ module OTTER(
     
     //Instantiate RegFile, connect all relevant I/O    
     REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(reg_wr), .ADR1(reg_adr1), .ADR2(reg_adr2), .WA(reg_wa), 
-        .WD(wd), .RS1(rs1), .RS2(IOBUS_OUT));
+        .WD(wb_data), .RS1(rs1), .RS2(IOBUS_OUT));
 
     //Create logic for Immediate Generator outputs and BAG and ALU MUX inputs    
     logic [31:0] Utype, Itype, Stype, Btype, Jtype;
@@ -181,17 +194,16 @@ module OTTER(
     logic [3:0] alu_fun;
     logic [31:0] srcA, srcB;
 
-    instr_t ex_pipe_reg;
 
     always_ff @(posedge CLK) begin
-        ex_pipe_reg.pc_inc <= de_pipe_reg.pc_inc;
-        ex_pipe_reg.opcode <= 
+        ex_pipe_reg<= de_pipe_reg;
+        ex_pipe_reg.alu_result <= IOBUS_ADDR; // output from alu
     end
     
     //Instantiate ALU two-to-one Mux, ALU four-to-one MUX,
     //and ALU; connect all relevant I/O
-    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.alu_src_a), .RS1(de_pipe_reg.rs1_data), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
-    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.alu_src_b), .ZERO(IOBUS_OUT), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
+    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.ALU_Op_A), .RS1(de_pipe_reg.rs1_data), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
+    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_Op_B), .ZERO(IOBUS_OUT), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
     ALU OTTER_ALU(.SRC_A(srcA), .SRC_B(srcB), .ALU_FUN(de_pipe_reg.alu_fun), .RESULT(IOBUS_ADDR));
 
 
@@ -210,7 +222,7 @@ module OTTER(
     logic [13:0] addr1;
     assign addr1 = pc_out[15:2];
     logic mem_rden1, mem_rden2, mem_we2;
-    logic [31:0] dout2, ir;
+    logic [31:0] dout2;
     logic sign;
     assign sign = ir[14];
     logic [1:0] size;
@@ -221,10 +233,25 @@ module OTTER(
         .MEM_WE2(mem_we2), .MEM_ADDR1(addr1), .MEM_ADDR2(IOBUS_ADDR), .MEM_DIN2(IOBUS_OUT), .MEM_SIZE(size),
          .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2));
 
-
+    always_ff @(posedge CLK) begin 
+        mem_pipe_reg <= ex_pipe_reg;
+        mem_pipe_reg.mem_rdata <= dout2;
+    end
 
 //////////////////////////////////////////////////
 // Writeback
+
+
+    //wb mux
+    always_comb begin 
+        case (mem_pipe_reg.rf_wr_sel)
+            0: wb_data = mem_pipe_reg.pc_inc; // JAL: PC+4
+            1: wb_data = 0;
+            2: wb_data = mem_pipe_reg.mem_rdata; //LOAD
+            3: wb_data = mem_pipe_reg.alu_result; //ALU
+            default: wb_data = 0;
+        endcase
+    end
 
     
 //Instantiate RegFile Mux, connect all relevant I/O

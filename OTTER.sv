@@ -233,7 +233,7 @@ module OTTER(
     logic sign;
     assign sign = ex_pipe_reg.mem_type[22];
     logic [1:0] size;
-    assign size = ex_pipe_reg.mem_type[1:];
+    assign size = ex_pipe_reg.mem_type[1:0];
     
     //Instantiate the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 

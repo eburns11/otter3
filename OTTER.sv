@@ -59,14 +59,20 @@ module OTTER(
     instr_t ex_pipe_reg; // P3
     instr_t mem_pipe_reg; // P4
 
-
+    initial begin 
+        if_pipe_reg = '0;
+        de_pipe_reg = '0;
+        ex_pipe_reg = '0;
+        mem_pipe_reg = '0;
+    end
 
     logic [31:0] wb_data;
     logic reg_wr;
     logic mem_we2;
     logic mem_rden2;
 
-    assign reg_wr = mem_pipe_reg.regWrite;
+    //assign reg_wr = mem_pipe_reg.regWrite;
+    assign reg_wr = 1;
     assign mem_we2 = 0; //if store
     assign mem_rden2 = 1; //always read cus mux? or turn it off if not accessing? ... OK for now. 
     
@@ -202,8 +208,8 @@ module OTTER(
     
     //Instantiate ALU two-to-one Mux, ALU four-to-one MUX,
     //and ALU; connect all relevant I/O
-    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.ALU_Op_A), .RS1(de_pipe_reg.rs1_data), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
-    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_Op_B), .ZERO(IOBUS_OUT), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
+    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.ALU_Op_A[0]), .RS1(de_pipe_reg.rs1_data), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
+    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_Op_B[1:0]), .ZERO(IOBUS_OUT), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
     ALU OTTER_ALU(.SRC_A(srcA), .SRC_B(srcB), .ALU_FUN(de_pipe_reg.alu_fun), .RESULT(IOBUS_ADDR));
 
 
@@ -221,12 +227,13 @@ module OTTER(
     //Immediate Generator, and RegFile Mux    
     logic [13:0] addr1;
     assign addr1 = pc_out[15:2];
-    logic mem_rden1, mem_rden2, mem_we2;
+    logic mem_rden1;
     logic [31:0] dout2;
+
     logic sign;
-    assign sign = ir[14];
+    assign sign = ex_pipe_reg.mem_type[22];
     logic [1:0] size;
-    assign size = ir[13:12];
+    assign size = ex_pipe_reg.mem_type[1:];
     
     //Instantiate the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 
@@ -255,8 +262,8 @@ module OTTER(
 
     
 //Instantiate RegFile Mux, connect all relevant I/O
-    FourMux OTTER_REG_MUX(.SEL(rf_wr_sel), .ZERO(pc_out_inc), .ONE(32'b0), .TWO(dout2), .THREE(IOBUS_ADDR),
-        .OUT(wd));
+//    FourMux OTTER_REG_MUX(.SEL(rf_wr_sel), .ZERO(pc_out_inc), .ONE(32'b0), .TWO(dout2), .THREE(IOBUS_ADDR),
+//        .OUT(wd));
     
     
     

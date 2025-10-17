@@ -124,7 +124,7 @@ module OTTER(
     end
     
     //Instantiate the PC and connect relevant I/O
-    PC OTTER_PC(.CLK(CLK), .RST(pc_rst), .PC_WRITE(pc_write), .PC_SOURCE(pc_source),
+    PC OTTER_PC(.CLK(CLK), .RST(pc_rst), .PC_WRITE(pc_write), .PC_SOURCE(mem_pipe_reg.pc_src),
         .JALR(jalr), .JAL(jal), .BRANCH(branch), .MTVEC(32'b0), .MEPC(32'b0),
         .PC_OUT(pc_out), .PC_OUT_INC(pc_out_inc));
 
@@ -244,7 +244,7 @@ module OTTER(
 
 
 //Instantiate Branch Address Generator, connect all relevant I/O    
-    BAG OTTER_BAG(.RS1(de_pipe_reg.rs1_data), .I_TYPE(de_pipe_reg.immediate), .J_TYPE(de_pipe_reg.immediate), .B_TYPE(de_pipe_reg.immediate), .FROM_PC(de_pipe_reg.pc_inc),
+    BAG OTTER_BAG(.RS1(ex_pipe_reg.rs1_data), .I_TYPE(ex_pipe_reg.immediate), .J_TYPE(ex_pipe_reg.immediate), .B_TYPE(ex_pipe_reg.immediate), .FROM_PC(ex_pipe_reg.pc_inc),
          .JAL(jal), .JALR(jalr), .BRANCH(branch));
 
 

@@ -118,7 +118,7 @@ module OTTER(
     assign mem_rden1 = 1; //always read an instruction?!?
     assign pc_rst = RST;
 
-    always_ff @(posedge CLK) begin
+    always_ff @(negedge CLK) begin
         if_pipe_reg.ir <= ir;  //always store the next instruction into the IF pc register
         if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
     end
@@ -144,7 +144,7 @@ module OTTER(
     //assign reg_wa = mem_pipe_reg.ir[11:7];
     //assign imgen_ir = if_pipe_reg.ir[31:7];
 
-    always_ff @(posedge CLK) begin
+    always_ff @(negedge CLK) begin
         de_pipe_reg.pc_inc <= if_pipe_reg.pc_inc;  //move the pc along
         de_pipe_reg.opcode <= opcode_t'(opcode);  //store the opcode
         de_pipe_reg.rs1_data <= rs1;  //store register 1 data
@@ -157,6 +157,7 @@ module OTTER(
         de_pipe_reg.ALU_src_b <= alu_src_b;  //store alu source b
         de_pipe_reg.pc_src <= pc_source;  //store the pc source
         de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
+        de_pipe_reg.ir <= if_pipe_reg.ir;
 
         case(opcode_t'(opcode))  //store the immediate value
             LUI : begin 
@@ -227,7 +228,7 @@ module OTTER(
 
 
 
-    always_ff @(posedge CLK) begin
+    always_ff @(negedge CLK) begin
         ex_pipe_reg <= de_pipe_reg;
         ex_pipe_reg.alu_result <= IOBUS_ADDR; // output from alu
         if (de_pipe_reg.opcode == STORE) begin
@@ -266,10 +267,10 @@ module OTTER(
     
     // the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 
-        .MEM_WE2(mem_we2), .MEM_ADDR1(addr1), .MEM_ADDR2(IOBUS_ADDR), .MEM_DIN2(IOBUS_OUT), .MEM_SIZE(size),
+        .MEM_WE2(mem_we2), .MEM_ADDR1(addr1), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
          .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2));
 
-    always_ff @(posedge CLK) begin 
+    always_ff @(negedge CLK) begin 
         mem_pipe_reg <= ex_pipe_reg;
         mem_pipe_reg.mem_rdata <= dout2;
     end
@@ -289,7 +290,7 @@ module OTTER(
         endcase
     end
 
-        always_ff @(posedge CLK) begin
+        always_ff @(negedge CLK) begin
         case(opcode_t'(ex_pipe_reg.opcode))  //store the immediate value
             LUI : begin 
                 mem_pipe_reg.regWrite <= 1;

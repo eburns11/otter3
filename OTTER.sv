@@ -60,22 +60,20 @@ module OTTER(
     instr_t ex_pipe_reg; // P3
     instr_t mem_pipe_reg; // P4
 
-    always @(negedge RST) begin
-        if_pipe_reg <= '0;
-        de_pipe_reg <= '0;
-        ex_pipe_reg <= '0;
-        mem_pipe_reg <= '0;
+    initial begin
+        if_pipe_reg <= 0; // P1
+        de_pipe_reg <= 0; // P2
+        ex_pipe_reg <= 0; // P3
+        mem_pipe_reg <= 0; // P4
     end
 
     logic [31:0] wb_data;
-    logic reg_wr;
-    logic mem_we2;
     logic mem_rden2;
     logic mem_rden1;
-    logic pc_rst, pc_write;   //wired
+    logic pc_rst, pc_write;
     logic [31:0] ir;
     logic [2:0] pc_source;
-    logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;   //pc_out wired
+    logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;
     logic [31:0] wd, rs1;
     logic [2:0] funct;
     logic [6:0] opcode;
@@ -92,8 +90,6 @@ module OTTER(
     logic br_eq, br_lt, br_ltu;
     logic [31:0] Utype, Itype, Stype, Btype, Jtype;
 
-    assign reg_wr = mem_pipe_reg.regWrite;
-    assign mem_we2 = ex_pipe_reg.memWrite;
     assign mem_rden2 = 1; //always read cus mux? or turn it off if not accessing? ... OK for now. 
     
     //NOTE ABOUT METHODOLOGY FOR CREATING TOP-LEVEL MODULE:
@@ -158,6 +154,7 @@ module OTTER(
         de_pipe_reg.pc_src <= pc_source;  //store the pc source
         de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
         de_pipe_reg.ir <= if_pipe_reg.ir;
+        de_pipe_reg.mem_type <= ir[14:12];
 
         case(opcode_t'(opcode))  //store the immediate value
             LUI : begin 
@@ -209,7 +206,7 @@ module OTTER(
     //Generator, and ALU MUXes     
     
     //Instantiate RegFile, connect all relevant I/O    
-    REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(reg_wr), .ADR1(if_pipe_reg.ir[19:15]), .ADR2(if_pipe_reg.ir[24:20]), .WA(mem_pipe_reg.rd_addr), 
+    REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(mem_pipe_reg.regWrite), .ADR1(if_pipe_reg.ir[19:15]), .ADR2(if_pipe_reg.ir[24:20]), .WA(mem_pipe_reg.rd_addr), 
         .WD(wb_data), .RS1(rs1), .RS2(IOBUS_OUT));
 
     //Create logic for Immediate Generator outputs and BAG and ALU MUX inputs    
@@ -232,7 +229,7 @@ module OTTER(
         ex_pipe_reg <= de_pipe_reg;
         ex_pipe_reg.alu_result <= IOBUS_ADDR; // output from alu
         if (de_pipe_reg.opcode == STORE) begin
-            ex_pipe_reg.memWrite = 1;
+            ex_pipe_reg.memWrite <= 1;
         end
     end
     
@@ -267,30 +264,13 @@ module OTTER(
     
     // the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 
-        .MEM_WE2(mem_we2), .MEM_ADDR1(addr1), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
+        .MEM_WE2(ex_pipe_reg.memWrite), .MEM_ADDR1(addr1), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
          .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2));
 
-    always_ff @(negedge CLK) begin 
+    always_ff @(negedge CLK) begin
         mem_pipe_reg <= ex_pipe_reg;
         mem_pipe_reg.mem_rdata <= dout2;
-    end
 
-//////////////////////////////////////////////////
-// Writeback
-
-
-    //wb mux
-    always_comb begin 
-        case (mem_pipe_reg.rf_wr_sel)
-            0: wb_data = mem_pipe_reg.pc_inc; // JAL: PC+4
-            1: wb_data = 0;
-            2: wb_data = mem_pipe_reg.mem_rdata; //LOAD
-            3: wb_data = mem_pipe_reg.alu_result; //ALU
-            default: wb_data = 0;
-        endcase
-    end
-
-        always_ff @(negedge CLK) begin
         case(opcode_t'(ex_pipe_reg.opcode))  //store the immediate value
             LUI : begin 
                 mem_pipe_reg.regWrite <= 1;
@@ -325,6 +305,20 @@ module OTTER(
         endcase
     end
 
+//////////////////////////////////////////////////
+// Writeback
+
+
+    //wb mux
+    always_comb begin 
+        case (mem_pipe_reg.rf_wr_sel)
+            0: wb_data = mem_pipe_reg.pc_inc; // JAL: PC+4
+            1: wb_data = 0;
+            2: wb_data = mem_pipe_reg.mem_rdata; //LOAD
+            3: wb_data = mem_pipe_reg.alu_result; //ALU
+            default: wb_data = 0;
+        endcase
+    end
     
 //Instantiate RegFile Mux, connect all relevant I/O
 //    FourMux OTTER_REG_MUX(.SEL(rf_wr_sel), .ZERO(pc_out_inc), .ONE(32'b0), .TWO(dout2), .THREE(IOBUS_ADDR),

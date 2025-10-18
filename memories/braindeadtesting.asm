@@ -18,10 +18,20 @@
 #add	x13,x6,x7
 #nop
 #nop
-#nop
 
-#addi	x14,x10,4
-#addi	x1,x2,-1
+#addi	x20,zero,0x80
+#nop
+#nop
+#sw	x1,0(x20)
+#sw	x2,4(x20)
+#sw	x3,8(x20)
+#sw	x4,12(x20)
+#sw	x5,16(x20)
+#lw	x5,0(x20)
+#lw	x4,4(x20)
+#lw	x3,8(x20)
+#lw	x2,12(x20)
+#lw	x1,16(x20)
 
 addi x7, zero, 7
 
@@ -40,3 +50,6 @@ nop
 nop
 
 sw x11,0(x8)
+
+.data
+bruh: .word 0

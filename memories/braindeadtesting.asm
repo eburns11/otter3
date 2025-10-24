@@ -35,7 +35,7 @@
 
 addi x7, zero, 7
 
-lui  x8,0x10 #(change this address to a Data memory address in your Otter)
+addi  x8,zero,0x40 #(change this address to a Data memory address in your Otter)
 
 addi  x10,zero,10
 

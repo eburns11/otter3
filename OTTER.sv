@@ -26,9 +26,6 @@ typedef struct packed{
     logic [4:0] rd_addr;
     logic [31:0] rs1_data;
     logic [31:0] rs2_data;
-    logic rs1_used;
-    logic rs2_used;
-    logic rd_used;
     logic [3:0] alu_fun;
     logic memWrite;
     logic memRead2;
@@ -223,7 +220,10 @@ module OTTER(
 
 //Create logic for ALU
 
-
+    logic [31:0] rs1_protected;
+    logic [31:0] rs2_protected;
+    logic [1:0] ex_det_fwd;
+    logic [1:0] mem_det_fwd;
 
     always_ff @(negedge CLK) begin
         ex_pipe_reg <= de_pipe_reg;
@@ -231,12 +231,74 @@ module OTTER(
         if (de_pipe_reg.opcode == STORE) begin
             ex_pipe_reg.memWrite <= 1;
         end
+
+        case(opcode_t'(de_pipe_reg.opcode))  //store the immediate value
+            LUI : begin 
+                ex_pipe_reg.regWrite <= 1;
+            end
+            AUIPC : begin
+                ex_pipe_reg.regWrite <= 1;
+            end
+            JAL : begin
+                ex_pipe_reg.regWrite <= 0;
+            end
+            JALR : begin
+                ex_pipe_reg.regWrite <= 1;
+            end
+            BRANCH : begin
+                ex_pipe_reg.regWrite <= 1;
+            end
+            LOAD : begin
+                ex_pipe_reg.regWrite <= 1;
+            end
+            STORE : begin
+                ex_pipe_reg.regWrite <= 0;
+            end
+            OP_IMM : begin
+                ex_pipe_reg.regWrite <= 1;
+            end
+            OP : begin
+                ex_pipe_reg.regWrite <= 1;
+            end
+            default : begin
+                ex_pipe_reg.regWrite <= 0;
+            end
+        endcase
+    end
+
+    RAWDetector EX_DETECTOR(.DEST_REG(ex_pipe_reg.rd_addr), .READ_REG_1(de_pipe_reg.rs1_addr), .READ_REG_2(de_pipe_reg.rs2_addr), .RF_WE(ex_pipe_reg.regWrite), .FWD(ex_det_fwd));
+    RAWDetector MEM_DETECTOR(.DEST_REG(mem_pipe_reg.rd_addr), .READ_REG_1(de_pipe_reg.rs1_addr), .READ_REG_2(de_pipe_reg.rs2_addr), .RF_WE(mem_pipe_reg.regWrite), .FWD(mem_det_fwd));
+
+    //rs1_protected mux
+    always_comb begin
+        if (ex_det_fwd[0]) begin
+            rs1_protected = ex_pipe_reg.alu_result;
+        end
+        else if (mem_det_fwd[0]) begin
+            rs1_protected = mem_pipe_reg.alu_result;
+        end
+        else begin
+            rs1_protected = de_pipe_reg.rs1_data;
+        end
+    end
+
+    //rs2_protected mux
+    always_comb begin
+        if (ex_det_fwd[1]) begin
+            rs2_protected = ex_pipe_reg.alu_result;
+        end
+        else if (mem_det_fwd[1]) begin
+            rs2_protected = mem_pipe_reg.alu_result;
+        end
+        else begin
+            rs2_protected = de_pipe_reg.rs2_data;
+        end
     end
     
     //Instantiate ALU two-to-one Mux, ALU four-to-one MUX,
     //and ALU; connect all relevant I/O
-    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.ALU_src_a), .RS1(de_pipe_reg.rs1_data), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
-    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_src_b), .ZERO(de_pipe_reg.rs2_data), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
+    TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.ALU_src_a), .RS1(rs1_protected), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
+    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_src_b), .ZERO(rs2_protected), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
     ALU OTTER_ALU(.SRC_A(srcA), .SRC_B(srcB), .ALU_FUN(de_pipe_reg.alu_fun), .RESULT(IOBUS_ADDR));
 
 
@@ -270,39 +332,6 @@ module OTTER(
     always_ff @(negedge CLK) begin
         mem_pipe_reg <= ex_pipe_reg;
         mem_pipe_reg.mem_rdata <= dout2;
-
-        case(opcode_t'(ex_pipe_reg.opcode))  //store the immediate value
-            LUI : begin 
-                mem_pipe_reg.regWrite <= 1;
-            end
-            AUIPC : begin
-                mem_pipe_reg.regWrite <= 1;
-            end
-            JAL : begin
-                mem_pipe_reg.regWrite <= 0;
-            end
-            JALR : begin
-                mem_pipe_reg.regWrite <= 1;
-            end
-            BRANCH : begin
-                mem_pipe_reg.regWrite <= 1;
-            end
-            LOAD : begin
-                mem_pipe_reg.regWrite <= 1;
-            end
-            STORE : begin
-                mem_pipe_reg.regWrite <= 0;
-            end
-            OP_IMM : begin
-                mem_pipe_reg.regWrite <= 1;
-            end
-            OP : begin
-                mem_pipe_reg.regWrite <= 1;
-            end
-            default : begin
-                mem_pipe_reg.regWrite <= 0;
-            end
-        endcase
     end
 
 //////////////////////////////////////////////////

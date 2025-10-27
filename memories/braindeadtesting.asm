@@ -39,8 +39,12 @@ add	s2,s0,s1
 add	s3,s1,s2
 add	s4,s2,s3
 add	s5,s3,s4
+addi	s6,zero,400
+li	t1,0xDEADBEEF
+sw	t1,0(s6)
 
-lw	s6,0(s5)
+lw	s7,0(s6)
+addi	s8,s7,1
 
 beq	zero,zero,begin
 

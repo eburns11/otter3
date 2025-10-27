@@ -68,7 +68,7 @@ module OTTER(
     logic [31:0] wb_data;
     logic mem_rden2;
     logic mem_rden1;
-    logic pc_rst, pc_write;
+    logic pc_rst;
     logic [31:0] ir;
     logic [2:0] pc_source;
     logic [31:0] pc_out, pc_out_inc, jalr, branch, jal;
@@ -113,15 +113,22 @@ module OTTER(
     assign pc_rst = RST;
 
     always_ff @(negedge CLK) begin
-        if (!stall) begin
-            if_pipe_reg.ir <= ir;  //always store the next instruction into the IF pc register
-            if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
+        if (RST) begin
+            if_pipe_reg <= 0;
+        end
+        else begin
+            if (!stall) begin
+                if_pipe_reg.ir <= ir;  //always store the next instruction into the IF pc register
+                if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
 
-            if (pc_source != 3'b000) begin //flush instruction if loading into pc
-                if_pipe_reg.flush <= 1;
-            end
-            else begin
-                if_pipe_reg.flush <= 0;
+                if (pc_source != 3'b000) begin //flush instruction if loading into pc
+                    if_pipe_reg.flush <= 1;
+                    de_pipe_reg.flush <= 1;
+                end
+                else begin
+                    if_pipe_reg.flush <= 0;
+                    de_pipe_reg.flush <= 0;
+                end
             end
         end
     end
@@ -152,53 +159,58 @@ module OTTER(
     //assign imgen_ir = if_pipe_reg.ir[31:7];
 
     always_ff @(negedge CLK) begin
-        if (!stall) begin
-            de_pipe_reg <= if_pipe_reg;
-            de_pipe_reg.opcode <= opcode_t'(opcode);  //store the opcode
-            de_pipe_reg.rs1_data <= rs1;  //store register 1 data
-            de_pipe_reg.rs2_data <= IOBUS_OUT;  // IOBUS_OUT used for rs2
-            de_pipe_reg.rd_addr <= rd_addr;  //store dest register addr
-            de_pipe_reg.rs1_addr <= rs1_addr;  //store reg 1 addr
-            de_pipe_reg.rs2_addr <= rs2_addr;  //store reg 2 addr
-            de_pipe_reg.alu_fun <= alu_fun;  //store alu fun
-            de_pipe_reg.ALU_src_a <= alu_src_a;  //store alu source a
-            de_pipe_reg.ALU_src_b <= alu_src_b;  //store alu source b
-            de_pipe_reg.pc_src <= pc_source;  //store the pc source
-            de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
-            de_pipe_reg.mem_type <= if_pipe_reg.ir[14:12];
+        if (RST) begin
+            de_pipe_reg <= 0;
+        end
+        else begin
+            if (!stall) begin
+                de_pipe_reg <= if_pipe_reg;
+                de_pipe_reg.opcode <= opcode_t'(opcode);  //store the opcode
+                de_pipe_reg.rs1_data <= rs1;  //store register 1 data
+                de_pipe_reg.rs2_data <= IOBUS_OUT;  // IOBUS_OUT used for rs2
+                de_pipe_reg.rd_addr <= rd_addr;  //store dest register addr
+                de_pipe_reg.rs1_addr <= rs1_addr;  //store reg 1 addr
+                de_pipe_reg.rs2_addr <= rs2_addr;  //store reg 2 addr
+                de_pipe_reg.alu_fun <= alu_fun;  //store alu fun
+                de_pipe_reg.ALU_src_a <= alu_src_a;  //store alu source a
+                de_pipe_reg.ALU_src_b <= alu_src_b;  //store alu source b
+                de_pipe_reg.pc_src <= pc_source;  //store the pc source
+                de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
+                de_pipe_reg.mem_type <= if_pipe_reg.ir[14:12];
 
-            case(opcode_t'(opcode))  //store the immediate value
-                LUI : begin 
-                    de_pipe_reg.immediate <= Utype;
-                end
-                AUIPC : begin
-                    de_pipe_reg.immediate <= Utype;
-                end
-                JAL : begin
-                    de_pipe_reg.immediate <= Jtype;
-                end
-                JALR : begin
-                    de_pipe_reg.immediate <= Jtype;
-                end
-                BRANCH : begin
-                    de_pipe_reg.immediate <= Btype;
-                end
-                LOAD : begin
-                    de_pipe_reg.immediate <= Itype;
-                end
-                STORE : begin
-                    de_pipe_reg.immediate <= Stype;
-                end
-                OP_IMM : begin
-                    de_pipe_reg.immediate <= Itype;
-                end
-                OP : begin
-                    de_pipe_reg.immediate <= 0;
-                end
-                default : begin
-                    de_pipe_reg.immediate <= 0;
-                end
-            endcase
+                case(opcode_t'(opcode))  //store the immediate value
+                    LUI : begin 
+                        de_pipe_reg.immediate <= Utype;
+                    end
+                    AUIPC : begin
+                        de_pipe_reg.immediate <= Utype;
+                    end
+                    JAL : begin
+                        de_pipe_reg.immediate <= Jtype;
+                    end
+                    JALR : begin
+                        de_pipe_reg.immediate <= Jtype;
+                    end
+                    BRANCH : begin
+                        de_pipe_reg.immediate <= Btype;
+                    end
+                    LOAD : begin
+                        de_pipe_reg.immediate <= Itype;
+                    end
+                    STORE : begin
+                        de_pipe_reg.immediate <= Stype;
+                    end
+                    OP_IMM : begin
+                        de_pipe_reg.immediate <= Itype;
+                    end
+                    OP : begin
+                        de_pipe_reg.immediate <= 0;
+                    end
+                    default : begin
+                        de_pipe_reg.immediate <= 0;
+                    end
+                endcase
+            end
         end
     end
 
@@ -279,16 +291,21 @@ module OTTER(
     end
 
     always_ff @(negedge CLK) begin
-        ex_pipe_reg <= de_pipe_reg;
-        ex_pipe_reg.alu_result <= IOBUS_ADDR; // output from alu
-        if (de_pipe_reg.opcode == STORE) begin
-            ex_pipe_reg.memWrite <= !de_pipe_reg.flush;
+        if (RST) begin
+            ex_pipe_reg <= 0;
         end
         else begin
-            ex_pipe_reg.memWrite <= 0;
-        end
+            ex_pipe_reg <= de_pipe_reg;
+            ex_pipe_reg.alu_result <= IOBUS_ADDR; // output from alu
+            if (de_pipe_reg.opcode == STORE) begin
+                ex_pipe_reg.memWrite <= !de_pipe_reg.flush;
+            end
+            else begin
+                ex_pipe_reg.memWrite <= 0;
+            end
 
-        ex_pipe_reg.regWrite <= regWrite;
+            ex_pipe_reg.regWrite <= regWrite;
+        end
     end
 
     RAWDetector EX_DETECTOR(.DEST_REG(ex_pipe_reg.rd_addr), .READ_REG_1(de_pipe_reg.rs1_addr), .READ_REG_2(de_pipe_reg.rs2_addr), .RF_WE(ex_pipe_reg.regWrite), .FWD(ex_det_fwd));
@@ -370,8 +387,13 @@ module OTTER(
          .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2));
 
     always_ff @(negedge CLK) begin
-        mem_pipe_reg <= ex_pipe_reg;
-        mem_pipe_reg.mem_rdata <= dout2;
+        if (RST) begin
+            mem_pipe_reg <= 0;
+        end
+        else begin
+            mem_pipe_reg <= ex_pipe_reg;
+            mem_pipe_reg.mem_rdata <= dout2;
+        end
     end
 
 //////////////////////////////////////////////////

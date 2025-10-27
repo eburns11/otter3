@@ -33,23 +33,15 @@
 #lw	x2,12(x20)
 #lw	x1,16(x20)
 
-addi x7, zero, 7
+begin:	addi	s0,zero,1
+addi	s1,zero,2
+add	s2,s0,s1
+add	s3,s1,s2
+add	s4,s2,s3
+add	s5,s3,s4
 
-addi  x8,zero,0x40 #(change this address to a Data memory address in your Otter)
+lw	s6,0(s5)
 
-addi  x10,zero,10
+beq	zero,zero,begin
 
-nop
-
-nop
-
-or x11,x7,x10
-
-nop
-
-nop
-
-sw x11,0(x8)
-
-.data
-bruh: .word 0
+j	begin

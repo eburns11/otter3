@@ -18,25 +18,34 @@
 #add	x13,x6,x7
 #nop
 #nop
+
+#addi	x20,zero,0x80
 #nop
+#nop
+#sw	x1,0(x20)
+#sw	x2,4(x20)
+#sw	x3,8(x20)
+#sw	x4,12(x20)
+#sw	x5,16(x20)
+#lw	x5,0(x20)
+#lw	x4,4(x20)
+#lw	x3,8(x20)
+#lw	x2,12(x20)
+#lw	x1,16(x20)
 
-#addi	x14,x10,4
-#addi	x1,x2,-1
+begin:	addi	s0,zero,1
+addi	s1,zero,2
+add	s2,s0,s1
+add	s3,s1,s2
+add	s4,s2,s3
+add	s5,s3,s4
+addi	s6,zero,400
+li	t1,0xDEADBEEF
+sw	t1,0(s6)
 
-addi x7, zero, 7
+lw	s7,0(s6)
+addi	s8,s7,1
 
-lui  x8,0x10 #(change this address to a Data memory address in your Otter)
+beq	zero,zero,begin
 
-addi  x10,zero,10
-
-nop
-
-nop
-
-or x11,x7,x10
-
-nop
-
-nop
-
-sw x11,0(x8)
+j	begin

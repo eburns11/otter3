@@ -324,7 +324,7 @@ module OTTER(
                 rs1_protected = mem_pipe_reg.mem_rdata;
             end
             else begin  //else use alu result
-                rs1_protected = mem_pipe_reg.alu_result;
+                rs1_protected = IOBUS_OUT; //Smem_pipe_reg.alu_result;
             end
         end
         else begin  //else normal behavior, no forward
@@ -339,7 +339,7 @@ module OTTER(
         end
         else if (mem_det_fwd[1]) begin
             if (mem_pipe_reg.opcode == LOAD) begin
-                rs2_protected = mem_pipe_reg.mem_rdata;
+                rs2_protected = IOBUS_OUT; // mem_pipe_reg.mem_rdata;
             end
             else begin
                 rs2_protected = mem_pipe_reg.alu_result;
@@ -372,7 +372,7 @@ module OTTER(
     //ImmediateGenerator OTTER_IMGEN(.IR(if_pipe_reg.ir[31:7]), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
     //    .B_TYPE(Btype), .J_TYPE(Jtype));
     //getting data late before
-    BAG OTTER_BAG(.RS1(de_pipe_reg.rs1_data), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(de_pipe_reg.pc_inc),
+    BAG OTTER_BAG(.RS1(rs1_protected), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(if_pipe_reg.pc_inc),
          .JAL(jal), .JALR(jalr), .BRANCH(branch));
 
 

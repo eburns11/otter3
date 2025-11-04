@@ -221,11 +221,15 @@ module OTTER(
     //Instantiate Branch Condition Generator, connect all 
     //relevant I/O
     BCG OTTER_BCG(.RS1(rs1), .RS2(IOBUS_OUT), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu));
-    
+    logic[2:0] pc_source_unstable; // can be modified by flushed instructions
     //Instantiate Decoder, connect all relevant I/O
     CU_DCDR OTTER_DCDR(.IR_30(ir30), .IR_OPCODE(opcode), .IR_FUNCT(funct), .BR_EQ(br_eq), .BR_LT(br_lt),
-     .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source),
+     .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source_unstable),
       .RF_WR_SEL(rf_wr_sel));  //needs to be modified for forwarding only I think
+    always_comb begin
+        if (!if_pipe_reg.flush) pc_source = pc_source_unstable; // prevents pc source from being clobbered by flushed instr 
+    end
+      
 
 //Create logic for the RegFile, Immediate Generator, Branch Addresss 
     //Generator, and ALU MUXes     
@@ -324,7 +328,7 @@ module OTTER(
                 rs1_protected = mem_pipe_reg.mem_rdata;
             end
             else begin  //else use alu result
-                rs1_protected = IOBUS_OUT; //Smem_pipe_reg.alu_result;
+                rs1_protected = IOBUS_ADDR; //mem_pipe_reg.alu_result;
             end
         end
         else begin  //else normal behavior, no forward
@@ -339,7 +343,7 @@ module OTTER(
         end
         else if (mem_det_fwd[1]) begin
             if (mem_pipe_reg.opcode == LOAD) begin
-                rs2_protected = IOBUS_OUT; // mem_pipe_reg.mem_rdata;
+                rs2_protected = IOBUS_ADDR;//IOBUS_OUT; // mem_pipe_reg.mem_rdata;
             end
             else begin
                 rs2_protected = mem_pipe_reg.alu_result;

@@ -34,8 +34,8 @@ typedef struct packed{
     logic [1:0] rf_wr_sel;
     logic [2:0] mem_type;  //sign, size
     logic [31:0] ir;
-    logic [31:0] pc_inc;
     logic [31:0] pc;
+    logic [31:0] pc_inc;
     logic [2:0] pc_src;
     logic ALU_src_a;
     logic [1:0] ALU_src_b;
@@ -119,7 +119,6 @@ module OTTER(
         end
         else begin
             if (!stall) begin
-                if_pipe_reg.ir <= ir;  //always store the next instruction into the IF pc register
                 if_pipe_reg.pc <= pc_out;
                 if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
 
@@ -145,13 +144,13 @@ module OTTER(
 
 //Create logic for FSM and Decoder
     
-    assign ir30 = if_pipe_reg.ir[30];
-    assign opcode = if_pipe_reg.ir[6:0];
-    assign funct = if_pipe_reg.ir[14:12];
+    assign ir30 = ir[30];
+    assign opcode = ir[6:0];
+    assign funct = ir[14:12];
 
-    assign rd_addr = if_pipe_reg.ir[11:7];
-    assign rs1_addr = if_pipe_reg.ir[19:15];
-    assign rs2_addr = if_pipe_reg.ir[24:20];
+    assign rd_addr = ir[11:7];
+    assign rs1_addr = ir[19:15];
+    assign rs2_addr = ir[24:20];
 
     //assign reg_adr1 = if_pipe_reg.ir[19:15];
     //assign reg_adr2 = if_pipe_reg.ir[24:20];
@@ -165,6 +164,7 @@ module OTTER(
         else begin
             if (!stall) begin
                 de_pipe_reg <= if_pipe_reg;
+                de_pipe_reg.ir <= ir;
                 de_pipe_reg.flush <= (pc_source != 3'b000);
                 de_pipe_reg.opcode <= opcode_t'(opcode);  //store the opcode
                 de_pipe_reg.rs1_data <= rs1;  //store register 1 data
@@ -177,7 +177,7 @@ module OTTER(
                 de_pipe_reg.ALU_src_b <= alu_src_b;  //store alu source b
                 de_pipe_reg.pc_src <= pc_source;  //store the pc source
                 de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
-                de_pipe_reg.mem_type <= if_pipe_reg.ir[14:12];
+                de_pipe_reg.mem_type <= ir[14:12];
 
                 if (pc_source != 3'b000) begin //flush instruction if loading into pc
                     de_pipe_reg.flush <= 1;
@@ -242,14 +242,14 @@ module OTTER(
     //Generator, and ALU MUXes     
     
     //Instantiate RegFile, connect all relevant I/O      //doesn't need to stall because it is changed from mem stage, not anything being stalled
-    REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(mem_pipe_reg.regWrite), .ADR1(if_pipe_reg.ir[19:15]), .ADR2(if_pipe_reg.ir[24:20]), .WA(mem_pipe_reg.rd_addr), 
+    REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(mem_pipe_reg.regWrite), .ADR1(ir[19:15]), .ADR2(ir[24:20]), .WA(mem_pipe_reg.rd_addr), 
         .WD(wb_data), .RS1(rs1), .RS2(IOBUS_OUT));
 
     //Create logic for Immediate Generator outputs and BAG and ALU MUX inputs    
  
     
     //Instantiate Immediate Generator, connect all relevant I/O
-    ImmediateGenerator OTTER_IMGEN(.IR(if_pipe_reg.ir[31:7]), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
+    ImmediateGenerator OTTER_IMGEN(.IR(ir[31:7]), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
         .B_TYPE(Btype), .J_TYPE(Jtype));
 
 

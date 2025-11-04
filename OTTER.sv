@@ -35,6 +35,7 @@ typedef struct packed{
     logic [2:0] mem_type;  //sign, size
     logic [31:0] ir;
     logic [31:0] pc_inc;
+    logic [31:0] pc;
     logic [2:0] pc_src;
     logic ALU_src_a;
     logic [1:0] ALU_src_b;
@@ -119,15 +120,14 @@ module OTTER(
         else begin
             if (!stall) begin
                 if_pipe_reg.ir <= ir;  //always store the next instruction into the IF pc register
+                if_pipe_reg.pc <= pc_out;
                 if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
 
                 if (pc_source != 3'b000) begin //flush instruction if loading into pc
                     if_pipe_reg.flush <= 1;
-                    //de_pipe_reg.flush <= 1;
                 end
                 else begin
                     if_pipe_reg.flush <= 0;
-                    //de_pipe_reg.flush <= 0;
                 end
             end
         end
@@ -178,6 +178,13 @@ module OTTER(
                 de_pipe_reg.pc_src <= pc_source;  //store the pc source
                 de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
                 de_pipe_reg.mem_type <= if_pipe_reg.ir[14:12];
+
+                if (pc_source != 3'b000) begin //flush instruction if loading into pc
+                    de_pipe_reg.flush <= 1;
+                end
+                else begin
+                    de_pipe_reg.flush <= 0;
+                end
 
                 case(opcode_t'(opcode))  //store the immediate value
                     LUI : begin 
@@ -366,7 +373,7 @@ module OTTER(
     //Instantiate ALU two-to-one Mux, ALU four-to-one MUX,
     //and ALU; connect all relevant I/O
     TwoMux OTTER_ALU_MUXA(.ALU_SRC_A(de_pipe_reg.ALU_src_a), .RS1(rs1_protected), .U_TYPE(de_pipe_reg.immediate), .SRC_A(srcA));
-    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_src_b), .ZERO(rs2_protected), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc_inc), .OUT(srcB));
+    FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_src_b), .ZERO(rs2_protected), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc), .OUT(srcB));
     ALU OTTER_ALU(.SRC_A(srcA), .SRC_B(srcB), .ALU_FUN(de_pipe_reg.alu_fun), .RESULT(IOBUS_ADDR));
 
     //Instantiate Branch Address Generator, connect all relevant I/O    
@@ -376,7 +383,7 @@ module OTTER(
     //ImmediateGenerator OTTER_IMGEN(.IR(if_pipe_reg.ir[31:7]), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
     //    .B_TYPE(Btype), .J_TYPE(Jtype));
     //getting data late before
-    BAG OTTER_BAG(.RS1(rs1_protected), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(if_pipe_reg.pc_inc),
+    BAG OTTER_BAG(.RS1(rs1_protected), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(if_pipe_reg.pc),
          .JAL(jal), .JALR(jalr), .BRANCH(branch));
 
 

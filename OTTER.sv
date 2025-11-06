@@ -368,9 +368,9 @@ module OTTER(
 
     always_comb begin
         if (!de_pipe_reg.flush) begin
-            pc_source <= de_pipe_reg.pc_src;
+            pc_source = de_pipe_reg.pc_src;
         end else begin
-            pc_source <= '0;
+            pc_source = '0;
         end
     end
 

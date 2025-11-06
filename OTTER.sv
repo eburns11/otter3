@@ -121,13 +121,9 @@ module OTTER(
             if (!stall) begin
                 if_pipe_reg.pc <= pc_out;
                 if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
-
-                if (pc_source != 3'b000) begin //flush instruction if loading into pc
-                    if_pipe_reg.flush <= 1;
-                end
-                else begin
-                    if_pipe_reg.flush <= 0;
-                end
+                // checking pc_source global here since it is assigned to de on the 
+                // same negedge 
+                if_pipe_reg.flush <= (pc_source != 3'b000 || (de_pipe_reg.pc_src != 3'b000));
             end
         end
     end
@@ -165,7 +161,7 @@ module OTTER(
             if (!stall) begin
                 de_pipe_reg <= if_pipe_reg;
                 de_pipe_reg.ir <= ir;
-                de_pipe_reg.flush <= (pc_source != 3'b000);
+                //de_pipe_reg.flush <= (pc_source != 3'b000 || ex_pipe_reg.pc_src != 3'b000);
                 de_pipe_reg.opcode <= opcode_t'(opcode);  //store the opcode
                 de_pipe_reg.rs1_data <= rs1;  //store register 1 data
                 de_pipe_reg.rs2_data <= IOBUS_OUT;  // IOBUS_OUT used for rs2
@@ -178,13 +174,6 @@ module OTTER(
                 de_pipe_reg.pc_src <= pc_source;  //store the pc source
                 de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
                 de_pipe_reg.mem_type <= ir[14:12];
-
-                if (pc_source != 3'b000) begin //flush instruction if loading into pc
-                    de_pipe_reg.flush <= 1;
-                end
-                else begin
-                    de_pipe_reg.flush <= 0;
-                end
 
                 case(opcode_t'(opcode))  //store the immediate value
                     LUI : begin 
@@ -234,7 +223,11 @@ module OTTER(
      .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source_unstable),
       .RF_WR_SEL(rf_wr_sel));  //needs to be modified for forwarding only I think
     always_comb begin
-        if (!if_pipe_reg.flush) pc_source = pc_source_unstable; // prevents pc source from being clobbered by flushed instr 
+        if (!de_pipe_reg.flush) begin 
+            pc_source = pc_source_unstable; // prevents pc source from being clobbered by flushed instr 
+        end else begin 
+            pc_source = 3'b000;
+        end
     end
       
 
@@ -383,7 +376,7 @@ module OTTER(
     //ImmediateGenerator OTTER_IMGEN(.IR(if_pipe_reg.ir[31:7]), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
     //    .B_TYPE(Btype), .J_TYPE(Jtype));
     //getting data late before
-    BAG OTTER_BAG(.RS1(rs1_protected), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(if_pipe_reg.pc),
+    BAG OTTER_BAG(.RS1(rs1_protected), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(ex_pipe_reg.pc),
          .JAL(jal), .JALR(jalr), .BRANCH(branch));
 
 

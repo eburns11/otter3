@@ -32,11 +32,11 @@ typedef struct packed{
     logic regWrite;
     logic flush;
     logic [1:0] rf_wr_sel;
+    logic [2:0] pc_src;
     logic [2:0] mem_type;  //sign, size
     logic [31:0] ir;
     logic [31:0] pc;
     logic [31:0] pc_inc;
-    logic [2:0] pc_src;
     logic ALU_src_a;
     logic [1:0] ALU_src_b;
     logic [31:0] immediate;
@@ -79,10 +79,7 @@ module OTTER(
     logic [6:0] opcode;
     logic ir30;
     logic [1:0] rf_wr_sel;
-    logic [4:0] reg_adr1;
-    logic [24:0] imgen_ir;
     //logic [4:0] reg_wa;
-    logic [4:0] reg_adr2;
     logic alu_src_a;
     logic [1:0] alu_src_b;
     logic [3:0] alu_fun;
@@ -123,7 +120,7 @@ module OTTER(
                 if_pipe_reg.pc_inc <= pc_out_inc;  //store the pc
                 // checking pc_source global here since it is assigned to de on the 
                 // same negedge 
-                if_pipe_reg.flush <= (pc_source != 3'b000 || (de_pipe_reg.pc_src != 3'b000));
+                if_pipe_reg.flush <= pc_source != 3'b000;
             end
         end
     end
@@ -148,6 +145,8 @@ module OTTER(
     assign rs1_addr = ir[19:15];
     assign rs2_addr = ir[24:20];
 
+    logic[2:0] pc_source_unstable; // can be modified by flushed instructions
+
     //assign reg_adr1 = if_pipe_reg.ir[19:15];
     //assign reg_adr2 = if_pipe_reg.ir[24:20];
     //assign reg_wa = mem_pipe_reg.ir[11:7];
@@ -161,7 +160,7 @@ module OTTER(
             if (!stall) begin
                 de_pipe_reg <= if_pipe_reg;
                 de_pipe_reg.ir <= ir;
-                //de_pipe_reg.flush <= (pc_source != 3'b000 || ex_pipe_reg.pc_src != 3'b000);
+                de_pipe_reg.flush <= (pc_source != 3'b000) | if_pipe_reg.flush;
                 de_pipe_reg.opcode <= opcode_t'(opcode);  //store the opcode
                 de_pipe_reg.rs1_data <= rs1;  //store register 1 data
                 de_pipe_reg.rs2_data <= IOBUS_OUT;  // IOBUS_OUT used for rs2
@@ -171,9 +170,9 @@ module OTTER(
                 de_pipe_reg.alu_fun <= alu_fun;  //store alu fun
                 de_pipe_reg.ALU_src_a <= alu_src_a;  //store alu source a
                 de_pipe_reg.ALU_src_b <= alu_src_b;  //store alu source b
-                de_pipe_reg.pc_src <= pc_source;  //store the pc source
                 de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
                 de_pipe_reg.mem_type <= ir[14:12];
+                de_pipe_reg.pc_src <= pc_source_unstable;
 
                 case(opcode_t'(opcode))  //store the immediate value
                     LUI : begin 
@@ -186,7 +185,7 @@ module OTTER(
                         de_pipe_reg.immediate <= Jtype;
                     end
                     JALR : begin
-                        de_pipe_reg.immediate <= Jtype;
+                        de_pipe_reg.immediate <= Itype;
                     end
                     BRANCH : begin
                         de_pipe_reg.immediate <= Btype;
@@ -217,18 +216,11 @@ module OTTER(
     //Instantiate Branch Condition Generator, connect all 
     //relevant I/O
     BCG OTTER_BCG(.RS1(rs1), .RS2(IOBUS_OUT), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu));
-    logic[2:0] pc_source_unstable; // can be modified by flushed instructions
+    
     //Instantiate Decoder, connect all relevant I/O
     CU_DCDR OTTER_DCDR(.IR_30(ir30), .IR_OPCODE(opcode), .IR_FUNCT(funct), .BR_EQ(br_eq), .BR_LT(br_lt),
      .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source_unstable),
       .RF_WR_SEL(rf_wr_sel));  //needs to be modified for forwarding only I think
-    always_comb begin
-        if (!de_pipe_reg.flush) begin 
-            pc_source = pc_source_unstable; // prevents pc source from being clobbered by flushed instr 
-        end else begin 
-            pc_source = 3'b000;
-        end
-    end
       
 
 //Create logic for the RegFile, Immediate Generator, Branch Addresss 
@@ -296,7 +288,7 @@ module OTTER(
     end
 
     always_ff @(negedge CLK) begin
-        if (RST) begin
+        if (RST || stall) begin
             ex_pipe_reg <= 0;
         end
         else if (!stall) begin
@@ -309,9 +301,6 @@ module OTTER(
                 ex_pipe_reg.memWrite <= 0;
             end
             ex_pipe_reg.regWrite <= regWrite;
-        end
-        else begin
-            ex_pipe_reg <= ex_pipe_reg; // hold it on stall so we dont get duplicate
         end
     end
 
@@ -328,7 +317,7 @@ module OTTER(
                 rs1_protected = mem_pipe_reg.mem_rdata;
             end
             else begin  //else use alu result
-                rs1_protected = IOBUS_ADDR; //mem_pipe_reg.alu_result;
+                rs1_protected = mem_pipe_reg.alu_result;
             end
         end
         else begin  //else normal behavior, no forward
@@ -343,7 +332,7 @@ module OTTER(
         end
         else if (mem_det_fwd[1]) begin
             if (mem_pipe_reg.opcode == LOAD) begin
-                rs2_protected = IOBUS_ADDR;//IOBUS_OUT; // mem_pipe_reg.mem_rdata;
+                rs2_protected = mem_pipe_reg.mem_rdata;
             end
             else begin
                 rs2_protected = mem_pipe_reg.alu_result;
@@ -354,7 +343,7 @@ module OTTER(
         end
     end
 
-    always_comb begin
+    always_ff @(negedge CLK) begin
         if ((ex_det_fwd != 2'b00) && (ex_pipe_reg.opcode == LOAD) && ex_pipe_reg.regWrite && !ex_pipe_reg.flush) begin  //if raw from ex stage and it is a load, stall the pipeline
             stall = 1'b1;
         end
@@ -376,7 +365,16 @@ module OTTER(
     //ImmediateGenerator OTTER_IMGEN(.IR(if_pipe_reg.ir[31:7]), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
     //    .B_TYPE(Btype), .J_TYPE(Jtype));
     //getting data late before
-    BAG OTTER_BAG(.RS1(rs1_protected), .I_TYPE(Itype), .J_TYPE(Jtype), .B_TYPE(Btype), .FROM_PC(ex_pipe_reg.pc),
+
+    always_comb begin
+        if (!de_pipe_reg.flush) begin
+            pc_source <= de_pipe_reg.pc_src;
+        end else begin
+            pc_source <= '0;
+        end
+    end
+
+    BAG OTTER_BAG(.RS1(rs1_protected), .I_TYPE(de_pipe_reg.immediate), .J_TYPE(de_pipe_reg.immediate), .B_TYPE(de_pipe_reg.immediate), .FROM_PC(de_pipe_reg.pc_inc),
          .JAL(jal), .JALR(jalr), .BRANCH(branch));
 
 

@@ -172,7 +172,6 @@ module OTTER(
                 de_pipe_reg.ALU_src_b <= alu_src_b;  //store alu source b
                 de_pipe_reg.rf_wr_sel <= rf_wr_sel;  //store the reg file write source
                 de_pipe_reg.mem_type <= if_pipe_reg.ir[14:12];
-                de_pipe_reg.pc_src <= pc_source_unstable;
 
                 case(opcode_t'(opcode))  //store the immediate value
                     LUI : begin 
@@ -209,17 +208,10 @@ module OTTER(
             end
         end
     end
-
-    //Create logic for Branch Condition Generator
-        
-    
-    //Instantiate Branch Condition Generator, connect all 
-    //relevant I/O
-    BCG OTTER_BCG(.RS1(rs1), .RS2(IOBUS_OUT), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu));
     
     //Instantiate Decoder, connect all relevant I/O
-    CU_DCDR OTTER_DCDR(.IR_30(ir30), .IR_OPCODE(opcode), .IR_FUNCT(funct), .BR_EQ(br_eq), .BR_LT(br_lt),
-     .BR_LTU(br_ltu), .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b), .PC_SOURCE(pc_source_unstable),
+    CU_DCDR OTTER_DCDR(.IR_30(ir30), .IR_OPCODE(opcode), .IR_FUNCT(funct),
+      .ALU_FUN(alu_fun), .ALU_SRCA(alu_src_a), .ALU_SRCB(alu_src_b),
       .RF_WR_SEL(rf_wr_sel));  //needs to be modified for forwarding only I think
       
 
@@ -227,7 +219,7 @@ module OTTER(
     //Generator, and ALU MUXes     
     
     //Instantiate RegFile, connect all relevant I/O      //doesn't need to stall because it is changed from mem stage, not anything being stalled
-    REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(mem_pipe_reg.regWrite), .ADR1(if_pipe_reg.ir[19:15]), .ADR2(if_pipe_reg.ir[24:20]), .WA(mem_pipe_reg.rd_addr), 
+    REG_FILE OTTER_REG_FILE(.CLK(CLK), .EN(mem_pipe_reg.regWrite), .ADR1(rs1_addr), .ADR2(rs2_addr), .WA(mem_pipe_reg.rd_addr), 
         .WD(wb_data), .RS1(rs1), .RS2(IOBUS_OUT));
 
     //Create logic for Immediate Generator outputs and BAG and ALU MUX inputs    
@@ -301,6 +293,9 @@ module OTTER(
                 ex_pipe_reg.memWrite <= 0;
             end
             ex_pipe_reg.regWrite <= regWrite;
+
+            ex_pipe_reg.rs1_data <= rs1_protected;
+            ex_pipe_reg.rs2_data <= rs2_protected;
         end
     end
 
@@ -358,6 +353,12 @@ module OTTER(
     FourMux OTTER_ALU_MUXB(.SEL(de_pipe_reg.ALU_src_b), .ZERO(rs2_protected), .ONE(de_pipe_reg.immediate), .TWO(de_pipe_reg.immediate), .THREE(de_pipe_reg.pc), .OUT(srcB));
     ALU OTTER_ALU(.SRC_A(srcA), .SRC_B(srcB), .ALU_FUN(de_pipe_reg.alu_fun), .RESULT(IOBUS_ADDR));
 
+    //Instantiate Branch Condition Generator, connect all 
+    //relevant I/O
+    BCG OTTER_BCG(.RS1(rs1_protected), .RS2(rs2_protected), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu));
+
+    PC_SRC_DCDR PC_SRC_DCDR(.IR_OPCODE(de_pipe_reg.opcode), .IR_FUNCT(de_pipe_reg.mem_type), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu), .PC_SOURCE(pc_source_unstable));
+
     //Instantiate Branch Address Generator, connect all relevant I/O    
     //BAG OTTER_BAG(.RS1(de_pipe_reg.rs1_data), .I_TYPE(de_pipe_reg.immediate), .J_TYPE(de_pipe_reg.immediate), .B_TYPE(de_pipe_reg.immediate), .FROM_PC(de_pipe_reg.pc_inc),
     //     .JAL(jal), .JALR(jalr), .BRANCH(branch));
@@ -368,7 +369,7 @@ module OTTER(
 
     always_comb begin
         if (!de_pipe_reg.flush) begin
-            pc_source = de_pipe_reg.pc_src;
+            pc_source = pc_source_unstable;
         end else begin
             pc_source = '0;
         end

@@ -74,7 +74,7 @@
     initial begin
         //$readmemh("performance.mem", memory, 0, 16383);
     
-      $readmemh("../memories/no_haz.mem", memory, 0, 4079);      // memory intitalization file only has  4080 entries
+      $readmemh("../memories/performance.mem", memory, 0, 4079);      // memory intitalization file only has  4080 entries
                
     end
     //assign wordAddr2 = MEM_ADDR2[15:2];
@@ -87,14 +87,14 @@
     //                || MEM_ADDR1[1:0] != 2'b0 || MEM_ADDR2[1:0] !=2'b0)? 1 : 0;
             
     // buffer the IO input for reading
-       always_ff @(posedge MEM_CLK) begin
+       always_ff @(negedge MEM_CLK) begin
       if(MEM_RDEN2)
         ioBuffer <= IO_IN;
     end
 
     
     // BRAM requires all reads and writes to occur synchronously
-    always_ff @(posedge MEM_CLK) begin
+    always_ff @(negedge MEM_CLK) begin
   
   // save data (WD) to memory (ADDR2)
        if (weAddrValid == 1) begin     // write enable and valid address space

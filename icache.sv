@@ -10,7 +10,7 @@ module imem(
     output logic [31:0] w7
     );
 
-    logic [31:0] ram[0:16383];
+    logic [31:0] ram[0:4079];
     initial $readmemh("performance.mem", ram, 0, 4079);
     //changed memory so it does output 8 words
     assign w0 = ram[a[31:2]];
@@ -38,7 +38,7 @@ module CacheFSM(input hit, input miss, input CLK, input RST, output logic update
         PS <= NS;
     end
     always_comb begin
-        update = 1'b1
+        update = 1'b1;
         pc_stall = 0;
         case (PS)
         ST_READ_CACHE: begin

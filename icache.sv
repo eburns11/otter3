@@ -104,6 +104,7 @@ module Cache(
     end
     always_ff @(negedge CLK) begin
         if(update) begin
+            tags[index] <= pc_tag;
             data[index][0] <= w0;
             data[index][1] <= w1;
             data[index][2] <= w2;

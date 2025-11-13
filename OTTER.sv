@@ -88,6 +88,7 @@ module OTTER(
     logic [31:0] Utype, Itype, Stype, Btype, Jtype;
     logic stall;
     logic [31:0] dout2;
+    logic cache_pc_stall;
 
     assign mem_rden2 = 1; //always read cus mux? or turn it off if not accessing? ... OK for now. 
     
@@ -126,8 +127,10 @@ module OTTER(
         end
     end
     
+    logic pc_write;
+    assign pc_write = ~stall & ~cache_pc_stall;
     //Instantiate the PC and connect relevant I/O
-    PC OTTER_PC(.CLK(CLK), .RST(pc_rst), .PC_WRITE(!stall), .PC_SOURCE(pc_source),
+    PC OTTER_PC(.CLK(CLK), .RST(pc_rst), .PC_WRITE(pc_write), .PC_SOURCE(pc_source),
         .JALR(jalr), .JAL(jal), .BRANCH(branch), .MTVEC(32'b0), .MEPC(32'b0),
         .PC_OUT(pc_out), .PC_OUT_INC(pc_out_inc));
 
@@ -386,8 +389,6 @@ module OTTER(
 
 //Create logic for Memory module; conecting wires to RegFile
     //Immediate Generator, and RegFile Mux    
-    logic [13:0] addr1;
-    assign addr1 = pc_out[15:2];
 
     logic sign;
     assign sign = ex_pipe_reg.mem_type[2];
@@ -396,8 +397,8 @@ module OTTER(
     
     // the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 
-        .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(addr1), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
-         .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2));
+        .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(pc_out), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
+         .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .RST(RST), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2), .PC_STALL(cache_pc_stall));
 
     always_ff @(posedge CLK) begin
         if (RST) begin

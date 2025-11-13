@@ -50,7 +50,7 @@
     input MEM_RDEN1,        // read enable Instruction
     input MEM_RDEN2,        // read enable data
     input MEM_WE2,          // write enable.
-    input [13:0] MEM_ADDR1, // Instruction Memory word Addr (Connect to PC[15:2])
+    input [31:0] MEM_ADDR1, // Instruction Memory word Addr (Connect to PC[15:2])
     input [31:0] MEM_ADDR2, // Data Memory Addr
     input [31:0] MEM_DIN2,  // Data to save
     input [1:0] MEM_SIZE,   // 0-Byte, 1-Half, 2-Word
@@ -60,7 +60,8 @@
     //output ERR,           // only used for testing
     output logic IO_WR,     // IO 1-write 0-read
     output logic [31:0] MEM_DOUT1,  // Instruction
-    output logic [31:0] MEM_DOUT2) /* syn_ramstyle= "block_ram" */; // Data
+    output logic [31:0] MEM_DOUT2, /* syn_ramstyle= "block_ram" */
+    output logic PC_STALL); // Data
     
     logic [13:0] wordAddr2;
     logic [31:0] memReadWord, ioBuffer, memReadSized;
@@ -71,11 +72,11 @@
     //(* rom_style="{distributed | block}" *)
     //(* ram_decomp = "power" *) logic [31:0] memory [0:16383];
 
-    logic [31:0] word[0:7];
+    logic [31:0] word [0:7];
     imem INSTR_MEMORY(.a(MEM_ADDR1), .w0(word[0]), .w1(word[1]), .w2(word[2]), .w3(word[3]), .w4(word[4]), .w5(word[5]), .w6(word[6]), .w7(word[7]));
     logic hit, miss;
-    logic update, pc_stall;
-    CacheFSM IMEM_FSM(.hit(hit), .miss(miss), .CLK(MEM_CLK), .RST(RST), .update(update), .pc_stall(pc_stall));
+    logic update;
+    CacheFSM IMEM_FSM(.hit(hit), .miss(miss), .CLK(MEM_CLK), .RST(RST), .update(update), .pc_stall(PC_STALL));
     Cache ICACHE(.PC(MEM_ADDR1), .CLK(MEM_CLK), .update(update), .w0(word[0]), .w1(word[1]), .w2(word[2]), .w3(word[3]), .w4(word[4]), .w5(word[5]), .w6(word[6]), .w7(word[7]),
                   .rd(MEM_DOUT1), .hit(hit), .miss(miss));
     

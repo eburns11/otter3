@@ -128,7 +128,7 @@ module OTTER(
     end
     
     logic pc_write;
-    assign pc_write = ~stall & ~cache_pc_stall;
+    assign pc_write = ~stall & ~(cache_pc_stall & (pc_source == 3'b000));
     //Instantiate the PC and connect relevant I/O
     PC OTTER_PC(.CLK(CLK), .RST(pc_rst), .PC_WRITE(pc_write), .PC_SOURCE(pc_source),
         .JALR(jalr), .JAL(jal), .BRANCH(branch), .MTVEC(32'b0), .MEPC(32'b0),

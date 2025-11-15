@@ -11,16 +11,18 @@ module imem(
     );
 
     logic [31:0] ram[0:4079];
-    initial $readmemh("performance.mem", ram, 0, 4079);
+    logic [31:0] addr;
+    assign addr = {a[31:5], 3'b000};
+    initial $readmemh("../hdl/performance.mem", ram, 0, 4079);
     //changed memory so it does output 8 words
-    assign w0 = ram[a[31:2]];
-    assign w1 = ram[a[31:2]+1];
-    assign w2 = ram[a[31:2]+2];
-    assign w3 = ram[a[31:2]+3];
-    assign w4 = ram[a[31:2]+4];
-    assign w5 = ram[a[31:2]+5];
-    assign w6 = ram[a[31:2]+6];
-    assign w7 = ram[a[31:2]+7];
+    assign w0 = ram[addr];
+    assign w1 = ram[addr+1];
+    assign w2 = ram[addr+2];
+    assign w3 = ram[addr+3];
+    assign w4 = ram[addr+4];
+    assign w5 = ram[addr+5];
+    assign w6 = ram[addr+6];
+    assign w7 = ram[addr+7];
 
 endmodule
 
@@ -39,7 +41,7 @@ module CacheFSM(input hit, input miss, input CLK, input RST, output logic update
     end
     always_comb begin
         update = 1'b1;
-        pc_stall = 0;
+        pc_stall = 1'b0;
         case (PS)
         ST_READ_CACHE: begin
             update = 1'b0;
@@ -53,7 +55,6 @@ module CacheFSM(input hit, input miss, input CLK, input RST, output logic update
             else NS = ST_READ_CACHE;
             end
         ST_READ_MEM: begin
-            pc_stall = 1'b1;
             NS = ST_READ_CACHE;
         end
         default: NS = ST_READ_CACHE;
@@ -70,12 +71,14 @@ module Cache(
     input logic [31:0] w6, input logic [31:0] w7,
     output logic [31:0] rd,output logic hit, output logic miss
     );
+
     parameter NUM_BLOCKS = 16;
     parameter BLOCK_SIZE = 8;
     parameter INDEX_SIZE = 4;
     parameter WORD_OFFSET_SIZE = 3;
     parameter BYTE_OFFSET = 0;
     parameter TAG_SIZE = 32 - INDEX_SIZE - WORD_OFFSET_SIZE - BYTE_OFFSET;
+
     logic [31:0] data[NUM_BLOCKS-1:0][BLOCK_SIZE-1:0];
     logic [TAG_SIZE-1:0] tags[NUM_BLOCKS-1:0];
     logic valid_bits[NUM_BLOCKS-1:0];

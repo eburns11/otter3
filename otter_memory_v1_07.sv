@@ -76,9 +76,12 @@
     imem INSTR_MEMORY(.a(MEM_ADDR1), .w0(word[0]), .w1(word[1]), .w2(word[2]), .w3(word[3]), .w4(word[4]), .w5(word[5]), .w6(word[6]), .w7(word[7]));
     logic hit, miss;
     logic update;
-    CacheFSM IMEM_FSM(.hit(hit), .miss(miss), .CLK(MEM_CLK), .RST(RST), .update(update), .pc_stall(PC_STALL));
-    Cache ICACHE(.PC(MEM_ADDR1), .CLK(MEM_CLK), .update(update), .w0(word[0]), .w1(word[1]), .w2(word[2]), .w3(word[3]), .w4(word[4]), .w5(word[5]), .w6(word[6]), .w7(word[7]),
-                  .rd(MEM_DOUT1), .hit(hit), .miss(miss));
+    logic d_hit, d_miss, d_update;
+    logic [31:0] d_rd, d_w0, d_w1, d_w2, d_w3;
+    
+    //L2CacheFSM IMEM_FSM(.hit(hit), .miss(miss), .CLK(MEM_CLK), .RST(RST), .update(update), .pc_stall(PC_STALL));
+    //L2Cache ICACHE(.PC(MEM_ADDR1), .CLK(MEM_CLK), .update(update), .w0(word[0]), .w1(word[1]), .w2(word[2]), .w3(word[3]), .w4(word[4]), .w5(word[5]), .w6(word[6]), .w7(word[7]),
+    //              .rd(MEM_DOUT1), .hit(hit), .miss(miss));
     
     
     initial begin
@@ -106,7 +109,7 @@
     // BRAM requires all reads and writes to occur synchronously
     always_ff @(negedge MEM_CLK) begin
   
-  // save data (WD) to memory (ADDR2)
+      // save data (WD) to memory (ADDR2)
        if (weAddrValid == 1) begin     // write enable and valid address space
         case({MEM_SIZE,byteOffset})
             4'b0000: memory[wordAddr2][7:0]   <= MEM_DIN2[7:0];     // sb at byte offsets
@@ -144,9 +147,15 @@
      //if (MEM_RDEN1)                   // need EN for extra load cycle to not change instruction
         //MEM_DOUT1 <= memory[MEM_ADDR1];
         
-    if (MEM_RDEN2)                       // Read word from memory
-        memReadWord <= memory[wordAddr2];
-        
+      if (MEM_RDEN2) begin                  // Read word from memory
+          memReadWord <= memory[wordAddr2];
+          if (d_miss) begin
+            d_w0 <= memory[wordAddr2];
+            d_w1 <= memory[wordAddr2 + 1];
+            d_w2 <= memory[wordAddr2 + 2];
+            d_w3 <= memory[wordAddr2 + 3];
+          end
+      end
     end
        
     // Change the data word into sized bytes and sign extend
@@ -185,9 +194,35 @@
       end
       else begin
         IO_WR = 0;                  // not MMIO
-        MEM_DOUT2 = memReadSized;   // output sized and sign extended data
+        if (d_hit) MEM_DOUT2 = d_rd;
+        else MEM_DOUT2 = memReadSized;   // output sized and sign extended data
         weAddrValid = MEM_WE2;      // address in valid memory range
       end
     end
-        
+
+    // DATA CACHE (lab6)
+
+    CacheFSM D_FSM(
+      .hit(d_hit),
+      .miss(d_miss),
+      .CLK(MEM_CLK),
+      .RST(RST),
+      .update(d_update),
+      .pc_stall(PC_STALL)
+    );
+
+    SA_Cache D_CACHE(
+      .PC(MEM_ADDR2),
+      .CLK(MEM_CLK),
+      .update(d_update),
+      .w0(d_w0),
+      .w1(d_w1),
+      .w2(d_w2),
+      .w3(d_w3),
+      .rd(d_rd),
+      .hit(d_hit),
+      .miss(d_miss)
+    );
+
+
  endmodule

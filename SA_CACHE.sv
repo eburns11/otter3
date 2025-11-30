@@ -1,85 +1,49 @@
-module sa_dmem(
+module dmem(
+    input logic CLK,
     input logic [31:0] a,
-    output logic [31:0] w0,
-    output logic [31:0] w1,
-    output logic [31:0] w2,
-    output logic [31:0] w3,
-    //output logic [31:0] w4,
-    //output logic [31:0] w5,
-    //output logic [31:0] w6,
-    //output logic [31:0] w7
+    input logic we,
+    input logic [31:0] wb_words [4],
+    output logic [31:0] words [4]
     );
 
     logic [31:0] ram[0:4079];
     logic [31:0] addr;
-    assign addr = {a[31:5], 3'b000};
+    assign addr = {a[31:4], 2'b00}; //fixed for 4 words at a time, not 8
     initial $readmemh("../hdl/performance.mem", ram, 0, 4079);
-    //changed memory so it does output 8 words
-    assign w0 = ram[addr];
-    assign w1 = ram[addr+1];
-    assign w2 = ram[addr+2];
-    assign w3 = ram[addr+3];
-    //assign w4 = ram[addr+4];
-    //assign w5 = ram[addr+5];
-    //assign w6 = ram[addr+6];
-    //assign w7 = ram[addr+7];
 
-endmodule
+    always_ff @(negedge CLK) begin
+        if (we) begin
+            ram[addr] <= wb_words[0];
+            ram[addr+1] <= wb_words[1];
+            ram[addr+2] <= wb_words[2];
+            ram[addr+3] <= wb_words[3];
 
-
-
-
-
-module CacheFSM(input hit, input miss, input CLK, input RST, output logic update, output logic pc_stall);
-    typedef enum{
-        ST_READ_CACHE,
-        ST_READ_MEM
-    } state_type;
-    state_type PS, NS;
-    always_ff @(posedge CLK) begin
-    if(RST == 1)
-        PS <= ST_READ_MEM;
-    else
-        PS <= NS;
-    end
-    always_comb begin
-        update = 1'b1;
-        pc_stall = 1'b0;
-        case (PS)
-        ST_READ_CACHE: begin
-            update = 1'b0;
-            if(hit) begin
-                NS = ST_READ_CACHE;
-            end
-            else if(miss) begin
-                pc_stall = 1'b1;
-                NS = ST_READ_MEM;
-            end
-            else NS = ST_READ_CACHE;
-            end
-        ST_READ_MEM: begin
-            NS = ST_READ_CACHE;
+            words <= '0;
+        end else begin
+            words[0] <= ram[addr];
+            words[1] <= ram[addr+1];
+            words[2] <= ram[addr+2];
+            words[3] <= ram[addr+3];
         end
-        default: NS = ST_READ_CACHE;
-        endcase
     end
-endmodule
 
+endmodule
 
 module SA_Cache(
-    input [31:0] PC,
     input CLK,
     input update,
-    input logic [31:0] w0,
-    input logic [31:0] w1,
-    input logic [31:0] w2,
-    input logic [31:0] w3,
+    input logic [31:0] addr,
+    input logic [31:0] words [4],
+    input logic cache_we,
+    input logic [31:0] mem_din,
+    input logic [1:0] mem_size,
+    input logic [1:0] mem_byte_offset,
     output logic [31:0] rd,
+    output logic mem_wb,
+    output logic [31:0] wb_words [4],
     output logic hit,
     output logic miss
     );
-
-
     //parameter BLOCK_SIZE = 4; // 4 words
     parameter INDEX_SIZE = 2; // 4 sets 
     parameter WORD_OFFSET_SIZE = 2; // 4 words per block
@@ -89,6 +53,9 @@ module SA_Cache(
     parameter NUM_WAYS = 4;
     parameter BLOCK_WORDS = 4;
 
+    //16 blocks x 4 words = 64 total words
+    //each set is 4 blocks
+
     typedef struct packed {
         logic [31:0] block[BLOCK_WORDS];
         logic [TAG_SIZE-1:0] tag;
@@ -96,21 +63,27 @@ module SA_Cache(
         logic dirty;
     } cache_way_t;
 
-    cache_way_t cache [NUM_SETS][NUM_WAYS];
-
-    initial begin
-        cache <= 0;
-    end
     logic [1:0] byte_offset;
     logic [1:0] word_offset;
     logic [1:0] index;
     logic [TAG_SIZE-1:0] tag;
 
-    assign byte_offset = PC[1:0];
-    assign word_offset = PC[3:2];
-    assign index = PC[5:4];
-    assign tag = PC[31:6];
+    cache_way_t cache [NUM_SETS][NUM_WAYS];
 
+    logic queue_we[NUM_SETS];
+    logic queue_lru[NUM_SETS];
+    PRIO_Q queues[NUM_SETS](.CLK(CLK), .we(queue_we), .in(index), .lru(queue_lru));
+
+    assign queue_we = (hit) ? 1 << index : '0;
+
+    initial begin
+        cache <= 0;
+    end
+
+    assign byte_offset = addr[1:0];
+    assign word_offset = addr[3:2];
+    assign index = addr[5:4];
+    assign tag = addr[31:6];
 
     logic way0_hit, way1_hit, way2_hit, way3_hit;
     logic [1:0] hit_way; // which way hit?
@@ -131,26 +104,44 @@ module SA_Cache(
         else               hit_way = 2'd0; //dflt
     end
 
-
     always_comb begin
-        rd = 32'h00000013; //nop
-        //if(hit) rd= cache[].data[]//data[index][pc_offset];
+        rd = '0; //blank data
+
         if (hit) rd = cache[index][hit_way].block[word_offset];
     end
 
     always_ff @(negedge CLK) begin
+        if (cache_we) begin
+            case({mem_size,mem_byte_offset})
+                4'b0000: cache[index][hit_way].block[word_offset][7:0]   <= mem_din[7:0];     // sb at byte offsets
+                4'b0001: cache[index][hit_way].block[word_offset][15:8]  <= mem_din[7:0];
+                4'b0010: cache[index][hit_way].block[word_offset][23:16] <= mem_din[7:0];
+                4'b0011: cache[index][hit_way].block[word_offset][31:24] <= mem_din[7:0];
+                4'b0100: cache[index][hit_way].block[word_offset][15:0]  <= mem_din[15:0];     // sh at byte offsets
+                4'b0101: cache[index][hit_way].block[word_offset][23:8]  <= mem_din[15:0];
+                4'b0110: cache[index][hit_way].block[word_offset][31:16] <= mem_din[15:0];
+                4'b1000: cache[index][hit_way].block[word_offset] <= mem_din;                  // sw
+            endcase
+
+            cache[index][cache_write_location].dirty <= 1;
+        end
+    end
+
+    assign mem_wb = update && cache[index][queue_lru[index]].dirty;
+    assign wb_words[0] = cache[index][queue_lru[index]].block[0];
+    assign wb_words[1] = cache[index][queue_lru[index]].block[1];
+    assign wb_words[2] = cache[index][queue_lru[index]].block[2];
+    assign wb_words[3] = cache[index][queue_lru[index]].block[3];
+
+    always_ff @(negedge CLK) begin
         if(update) begin
-            // FIXME: alwats loading into way 0 (impl w/ wb)
-            cache[index][0].valid <= 1;
-            cache[index][0].tag <= tag;
-            cache[index][0].block[0] <= w0;
-            cache[index][0].block[1] <= w1;
-            cache[index][0].block[2] <= w2;
-            cache[index][0].block[3] <= w3;
-            //cache[index][0].block[4] <= w4;
-            //cache[index][0].block[5] <= w5;
-            //cache[index][0].block[6] <= w6;
-            //cache[index][0].block[7] <= w7;
+            cache[index][queue_lru[index]].valid <= 1;
+            cache[index][queue_lru[index]].dirty <= 0;
+            cache[index][queue_lru[index]].tag <= tag;
+            cache[index][queue_lru[index]].block[0] <= w0;
+            cache[index][queue_lru[index]].block[1] <= w1;
+            cache[index][queue_lru[index]].block[2] <= w2;
+            cache[index][queue_lru[index]].block[3] <= w3;
         end
     end
 endmodule

@@ -1,13 +1,6 @@
 module imem(
     input logic [31:0] a,
-    output logic [31:0] w0,
-    output logic [31:0] w1,
-    output logic [31:0] w2,
-    output logic [31:0] w3,
-    output logic [31:0] w4,
-    output logic [31:0] w5,
-    output logic [31:0] w6,
-    output logic [31:0] w7
+    output logic [31:0] words [8]
     );
 
     logic [31:0] ram[0:4079];
@@ -15,14 +8,14 @@ module imem(
     assign addr = {a[31:5], 3'b000};
     initial $readmemh("../hdl/performance.mem", ram, 0, 4079);
     //changed memory so it does output 8 words
-    assign w0 = ram[addr];
-    assign w1 = ram[addr+1];
-    assign w2 = ram[addr+2];
-    assign w3 = ram[addr+3];
-    assign w4 = ram[addr+4];
-    assign w5 = ram[addr+5];
-    assign w6 = ram[addr+6];
-    assign w7 = ram[addr+7];
+    assign words[0] = ram[addr];
+    assign words[1] = ram[addr+1];
+    assign words[2] = ram[addr+2];
+    assign words[3] = ram[addr+3];
+    assign words[4] = ram[addr+4];
+    assign words[5] = ram[addr+5];
+    assign words[6] = ram[addr+6];
+    assign words[7] = ram[addr+7];
 
 endmodule
 
@@ -63,13 +56,13 @@ module CacheFSM(input hit, input miss, input CLK, input RST, output logic update
 endmodule
 
 
-module Cache(
-    input [31:0] PC,input CLK,input update,
-    input logic [31:0] w0,input logic [31:0] w1,
-    input logic [31:0] w2, input logic [31:0] w3,
-    input logic [31:0] w4, input logic [31:0] w5,
-    input logic [31:0] w6, input logic [31:0] w7,
-    output logic [31:0] rd,output logic hit, output logic miss
+module DM_Cache(
+    input [31:0] PC,input CLK,
+    input update,
+    input logic [31:0] words [8],
+    output logic [31:0] rd,
+    output logic hit,
+    output logic miss
     );
 
     parameter NUM_BLOCKS = 16;
@@ -108,14 +101,14 @@ module Cache(
     always_ff @(negedge CLK) begin
         if(update) begin
             tags[index] <= pc_tag;
-            data[index][0] <= w0;
-            data[index][1] <= w1;
-            data[index][2] <= w2;
-            data[index][3] <= w3;
-            data[index][4] <= w4;
-            data[index][5] <= w5;
-            data[index][6] <= w6;
-            data[index][7] <= w7;
+            data[index][0] <= words[0];
+            data[index][1] <= words[1];
+            data[index][2] <= words[2];
+            data[index][3] <= words[3];
+            data[index][4] <= words[4];
+            data[index][5] <= words[5];
+            data[index][6] <= words[6];
+            data[index][7] <= words[7];
             valid_bits[index] <= 1'b1;
         end
     end

@@ -44,185 +44,105 @@
 // Revision 1.07 - remove unused wordAddr1 signal
 //
 //////////////////////////////////////////////////////////////////////////////////
-                                                                                                                             
-  module Memory (
-    input MEM_CLK,
-    input MEM_RDEN1,        // read enable Instruction
-    input MEM_RDEN2,        // read enable data
-    input MEM_WE2,          // write enable.
-    input [31:0] MEM_ADDR1, // Instruction Memory word Addr (Connect to PC[15:2])
-    input [31:0] MEM_ADDR2, // Data Memory Addr
-    input [31:0] MEM_DIN2,  // Data to save
-    input [1:0] MEM_SIZE,   // 0-Byte, 1-Half, 2-Word
-    input MEM_SIGN,         // 1-unsigned 0-signed
-    input [31:0] IO_IN,     // Data from IO
-    input RST,
-    //output ERR,           // only used for testing
-    output logic IO_WR,     // IO 1-write 0-read
-    output logic [31:0] MEM_DOUT1,  // Instruction
-    output logic [31:0] MEM_DOUT2, /* syn_ramstyle= "block_ram" */
-    output logic PC_STALL); // Data
-    
-    logic [13:0] wordAddr2;
-    logic [31:0] memReadWord, ioBuffer, memReadSized;
-    logic [1:0] byteOffset;
-    logic weAddrValid;      // active when saving (WE) to valid memory address
-    logic [31:0] memory [0:4095] /* syn_ramstyle= "block_ram" */;   //Tim modified
-    
-    //(* rom_style="{distributed | block}" *)
-    //(* ram_decomp = "power" *) logic [31:0] memory [0:16383];
-
-    logic [31:0] word [0:7];
-    imem INSTR_MEMORY(.a(MEM_ADDR1), .w0(word[0]), .w1(word[1]), .w2(word[2]), .w3(word[3]), .w4(word[4]), .w5(word[5]), .w6(word[6]), .w7(word[7]));
-    logic hit, miss;
-    logic update;
-    logic d_hit, d_miss, d_update;
-    logic [31:0] d_rd, d_w0, d_w1, d_w2, d_w3;
-    
-    //L2CacheFSM IMEM_FSM(.hit(hit), .miss(miss), .CLK(MEM_CLK), .RST(RST), .update(update), .pc_stall(PC_STALL));
-    //L2Cache ICACHE(.PC(MEM_ADDR1), .CLK(MEM_CLK), .update(update), .w0(word[0]), .w1(word[1]), .w2(word[2]), .w3(word[3]), .w4(word[4]), .w5(word[5]), .w6(word[6]), .w7(word[7]),
-    //              .rd(MEM_DOUT1), .hit(hit), .miss(miss));
-    
-    
-    initial begin
-        //$readmemh("performance.mem", memory, 0, 16383);
-    
-      $readmemh("../hdl/performance.mem", memory, 0, 4079);      // memory intitalization file only has  4080 entries
-               
-    end
-    //assign wordAddr2 = MEM_ADDR2[15:2];
-        assign wordAddr2 = MEM_ADDR2[13:2];     // change memory size to 4096
-    assign byteOffset = MEM_ADDR2[1:0];     // byte offset of memory address
-         
-    // NOT USED IN OTTER
-    //Check for misalligned or out of bounds memory accesses
-    //assign ERR = ((MEM_ADDR1 >= 2**ACTUAL_WIDTH)|| (MEM_ADDR2 >= 2**ACTUAL_WIDTH)
-    //                || MEM_ADDR1[1:0] != 2'b0 || MEM_ADDR2[1:0] !=2'b0)? 1 : 0;
-            
-    // buffer the IO input for reading
-       always_ff @(negedge MEM_CLK) begin
-      if(MEM_RDEN2)
-        ioBuffer <= IO_IN;
-    end
-
-    
-    // BRAM requires all reads and writes to occur synchronously
-    always_ff @(negedge MEM_CLK) begin
+                                                                                                                            
+module Memory (
+  input MEM_CLK,
+  input MEM_WE2,          // write enable.
+  input [31:0] MEM_ADDR1, // Instruction Memory word Addr (Connect to PC[15:2])
+  input [31:0] MEM_ADDR2, // Data Memory Addr
+  input [31:0] MEM_DIN2,  // Data to save
+  input [1:0] MEM_SIZE,   // 0-Byte, 1-Half, 2-Word
+  input MEM_SIGN,         // 1-unsigned 0-signed
+  input [31:0] IO_IN,     // Data from IO
+  input RST,
+  output logic IO_WR,     // IO 1-write 0-read
+  output logic [31:0] MEM_DOUT1,  // Instruction
+  output logic [31:0] MEM_DOUT2, // Data
+  output logic PC_STALL);
   
-      // save data (WD) to memory (ADDR2)
-       if (weAddrValid == 1) begin     // write enable and valid address space
-        case({MEM_SIZE,byteOffset})
-            4'b0000: memory[wordAddr2][7:0]   <= MEM_DIN2[7:0];     // sb at byte offsets
-            4'b0001: memory[wordAddr2][15:8]  <= MEM_DIN2[7:0];
-            4'b0010: memory[wordAddr2][23:16] <= MEM_DIN2[7:0];
-            4'b0011: memory[wordAddr2][31:24] <= MEM_DIN2[7:0];
-            //4'b0100: memory[wordAddr2][15:0]  <= MEM_DIN2[15:0];    // sh at byte offsets
-                    4'b0100:begin                                  // sh at byte offsets samir break up into 8 bits
-                        memory[wordAddr2][15:8] <= MEM_DIN2[15:8];    
-                        memory[wordAddr2][7:0]  <= MEM_DIN2[7:0];    
-                    end
-           // 4'b0101: memory[wordAddr2][23:8]  <= MEM_DIN2[15:0];
-                4'b0101:begin
-                        memory[wordAddr2][23:16] <= MEM_DIN2[15:8];
-                        memory[wordAddr2][15:8]  <= MEM_DIN2[7:0];
-                        end
-            //4'b0110: memory[wordAddr2][31:16] <= MEM_DIN2[15:0];
-                4'b0110:begin
-                        memory[wordAddr2][31:24] <= MEM_DIN2[15:8];
-                        memory[wordAddr2][23:16] <= MEM_DIN2[7:0];
-                        end
-            //4'b1000: memory[wordAddr2]        <= MEM_DIN2;          // sw
-                4'b1000:begin 
-                        memory[wordAddr2][31:24] <= MEM_DIN2[31:24];  // sw
-                        memory[wordAddr2][23:16] <= MEM_DIN2[23:16];
-                        memory[wordAddr2][15:8]  <= MEM_DIN2[15:8];  // sw
-                        memory[wordAddr2][7:0]   <= MEM_DIN2[7:0];
-                        end
-			      //default: memory[wordAddr2]      <= 32'b0   // unsupported size, byte offset
-			      // removed to avoid mistakes causing memory to be zeroed.
-        endcase
-      end
-      // read all data synchronously required for BRAM
+  logic [31:0] memReadWord, ioBuffer, memReadSized;
+  logic [1:0] byteOffset;
+  assign byteOffset = MEM_ADDR2[1:0];     // byte offset of memory address
+  logic weAddrValid;      // active when saving (WE) to valid memory address
+
+  logic [31:0] icache_words [8];
+  imem INSTR_MEMORY(.a(MEM_ADDR1), .words(icache_words));
+  logic icache_hit, icache_miss, icache_update, icache_pc_stall;
+
+  CacheFSM IMEM_FSM(.hit(icache_hit), .miss(icache_miss), .CLK(MEM_CLK), .RST(RST), .update(icache_update), .pc_stall(icache_pc_stall));
+  DM_Cache ICACHE(.PC(MEM_ADDR1), .CLK(MEM_CLK), .update(icache_update), .words(icache_words),
+                  .rd(MEM_DOUT1), .hit(icache_hit), .miss(icache_miss));
+
+  logic [31:0] dcache_words [4];
+  logic [31:0] dcache_wb_words [4];
+  logic dcache_we;
+  dmem DATA_MEMORY(.CLK(MEM_CLK), .a(MEM_ADDR2), .we(dcache_we), .wb_words(dcache_wb_words), .words(dcache_words));
+  logic dcache_hit, dcache_miss, dcache_update, dcache_pc_stall;
+  logic [31:0] dcache_out;
+
+  //we need to find a stall method other than pc, this won't work. Do we need to stall the entire pipeline?
+  CacheFSM DMEM_FSM(.hit(dcache_hit), .miss(dcache_miss), .CLK(MEM_CLK), .RST(RST), .update(dcache_update), .pc_stall(dcache_pc_stall));
+  SA_Cache DCACHE(.CLK(MEM_CLK), .update(dcache_update), .addr(MEM_ADDR2), .words(dcache_words), .cache_we(MEM_WE2), .mem_din(MEM_DIN2), .mem_size(MEM_SIZE), .mem_byte_offset(byteOffset),
+                  .rd(dcache_out), .mem_wb(dcache_we), .wb_words(dcache_wb_words), .hit(dcache_hit), .miss(dcache_miss));
+  
+  assign PC_STALL = icache_pc_stall | dcache_pc_stall;
+
+  
+          
+  // buffer the IO input for reading
+  always_ff @(negedge MEM_CLK) begin
+    if(MEM_RDEN2)
+      ioBuffer <= IO_IN;
+  end
+
+  
+  // BRAM requires all reads and writes to occur synchronously
+  always_ff @(negedge MEM_CLK) begin
+    if (MEM_RDEN2)                       // Read word from memory
+      memReadWord <= memory[wordAddr2];
       
-     //if (MEM_RDEN1)                   // need EN for extra load cycle to not change instruction
-        //MEM_DOUT1 <= memory[MEM_ADDR1];
-        
-      if (MEM_RDEN2) begin                  // Read word from memory
-          memReadWord <= memory[wordAddr2];
-          if (d_miss) begin
-            d_w0 <= memory[wordAddr2];
-            d_w1 <= memory[wordAddr2 + 1];
-            d_w2 <= memory[wordAddr2 + 2];
-            d_w3 <= memory[wordAddr2 + 3];
-          end
-      end
+  end
+      
+  // Change the data word into sized bytes and sign extend
+  always_comb begin
+    case({MEM_SIGN,MEM_SIZE,byteOffset})
+      5'b00011: memReadSized = {{24{memReadWord[31]}},memReadWord[31:24]};  // signed byte
+      5'b00010: memReadSized = {{24{memReadWord[23]}},memReadWord[23:16]};
+      5'b00001: memReadSized = {{24{memReadWord[15]}},memReadWord[15:8]};
+      5'b00000: memReadSized = {{24{memReadWord[7]}},memReadWord[7:0]};
+                                  
+      5'b00110: memReadSized = {{16{memReadWord[31]}},memReadWord[31:16]};  // signed half
+      5'b00101: memReadSized = {{16{memReadWord[23]}},memReadWord[23:8]};
+      5'b00100: memReadSized = {{16{memReadWord[15]}},memReadWord[15:0]};
+          
+      5'b01000: memReadSized = memReadWord;                   // word
+              
+      5'b10011: memReadSized = {24'd0,memReadWord[31:24]};    // unsigned byte
+      5'b10010: memReadSized = {24'd0,memReadWord[23:16]};
+      5'b10001: memReadSized = {24'd0,memReadWord[15:8]};
+      5'b10000: memReadSized = {24'd0,memReadWord[7:0]};
+              
+      5'b10110: memReadSized = {16'd0,memReadWord[31:16]};    // unsigned half
+      5'b10101: memReadSized = {16'd0,memReadWord[23:8]};
+      5'b10100: memReadSized = {16'd0,memReadWord[15:0]};
+          
+      default:  memReadSized = 32'b0;     // unsupported size, byte offset combination
+    endcase
+  end
+
+  //lowk wanna just forget mmio because I dont think its an expected use case
+  // Memory Mapped IO 
+  always_comb begin
+    if(MEM_ADDR2 >= 32'h00010000) begin  // external address range
+      IO_WR = MEM_WE2;                 // IO Write
+      MEM_DOUT2 = ioBuffer;            // IO read from buffer
+      weAddrValid = 0;                 // address beyond memory range
     end
-       
-    // Change the data word into sized bytes and sign extend
-    always_comb begin
-      case({MEM_SIGN,MEM_SIZE,byteOffset})
-        5'b00011: memReadSized = {{24{memReadWord[31]}},memReadWord[31:24]};  // signed byte
-        5'b00010: memReadSized = {{24{memReadWord[23]}},memReadWord[23:16]};
-        5'b00001: memReadSized = {{24{memReadWord[15]}},memReadWord[15:8]};
-        5'b00000: memReadSized = {{24{memReadWord[7]}},memReadWord[7:0]};
-                                    
-        5'b00110: memReadSized = {{16{memReadWord[31]}},memReadWord[31:16]};  // signed half
-        5'b00101: memReadSized = {{16{memReadWord[23]}},memReadWord[23:8]};
-        5'b00100: memReadSized = {{16{memReadWord[15]}},memReadWord[15:0]};
-            
-        5'b01000: memReadSized = memReadWord;                   // word
-               
-        5'b10011: memReadSized = {24'd0,memReadWord[31:24]};    // unsigned byte
-        5'b10010: memReadSized = {24'd0,memReadWord[23:16]};
-        5'b10001: memReadSized = {24'd0,memReadWord[15:8]};
-        5'b10000: memReadSized = {24'd0,memReadWord[7:0]};
-               
-        5'b10110: memReadSized = {16'd0,memReadWord[31:16]};    // unsigned half
-        5'b10101: memReadSized = {16'd0,memReadWord[23:8]};
-        5'b10100: memReadSized = {16'd0,memReadWord[15:0]};
-            
-        default:  memReadSized = 32'b0;     // unsupported size, byte offset combination
-      endcase
+    else begin
+      IO_WR = 0;                  // not MMIO
+      MEM_DOUT2 = memReadSized;   // output sized and sign extended data
+      weAddrValid = MEM_WE2;      // address in valid memory range
     end
- 
-    // Memory Mapped IO 
-    always_comb begin
-      if(MEM_ADDR2 >= 32'h00010000) begin  // external address range
-        IO_WR = MEM_WE2;                 // IO Write
-        MEM_DOUT2 = ioBuffer;            // IO read from buffer
-        weAddrValid = 0;                 // address beyond memory range
-      end
-      else begin
-        IO_WR = 0;                  // not MMIO
-        if (d_hit) MEM_DOUT2 = d_rd;
-        else MEM_DOUT2 = memReadSized;   // output sized and sign extended data
-        weAddrValid = MEM_WE2;      // address in valid memory range
-      end
-    end
-
-    // DATA CACHE (lab6)
-
-    CacheFSM D_FSM(
-      .hit(d_hit),
-      .miss(d_miss),
-      .CLK(MEM_CLK),
-      .RST(RST),
-      .update(d_update),
-      .pc_stall(PC_STALL)
-    );
-
-    SA_Cache D_CACHE(
-      .PC(MEM_ADDR2),
-      .CLK(MEM_CLK),
-      .update(d_update),
-      .w0(d_w0),
-      .w1(d_w1),
-      .w2(d_w2),
-      .w3(d_w3),
-      .rd(d_rd),
-      .hit(d_hit),
-      .miss(d_miss)
-    );
-
-
- endmodule
+  end
+      
+endmodule

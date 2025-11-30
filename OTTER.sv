@@ -67,8 +67,6 @@ module OTTER(
     end
 
     logic [31:0] wb_data;
-    logic mem_rden2;
-    logic mem_rden1;
     logic pc_rst;
     logic [31:0] ir;
     logic [2:0] pc_source;
@@ -89,8 +87,6 @@ module OTTER(
     logic stall;
     logic [31:0] dout2;
     logic cache_pc_stall;
-
-    assign mem_rden2 = 1; //always read cus mux? or turn it off if not accessing? ... OK for now. 
     
     //NOTE ABOUT METHODOLOGY FOR CREATING TOP-LEVEL MODULE:
     //I decided to look at the OTTER diagram and create logic (connecting wires)
@@ -107,8 +103,6 @@ module OTTER(
 // Instruction Fetch
 
     //Create logic for PC; connecting wires to Memory module and RegFile Mux
-
-    assign mem_rden1 = 1; //always read an instruction?!?
     assign pc_rst = RST;
 
     always_ff @(posedge CLK) begin

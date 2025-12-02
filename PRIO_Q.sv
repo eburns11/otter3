@@ -1,12 +1,12 @@
 //2 bit priority queue for the SA Cache
 //2 bits for 4 sets
 
-module PRIO_Q{
+module PRIO_Q(
     input logic CLK,
     input logic we,
     input logic [1:0] in,
     output logic [1:0] lru
-};
+);
 
     reg [1:0] slots [4];
     logic slots_eq [3];

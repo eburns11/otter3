@@ -18,7 +18,10 @@ module dmem(
             ram[addr+2] <= wb_words[2];
             ram[addr+3] <= wb_words[3];
 
-            words <= '0;
+            words[0] <= '0;
+            words[1] <= '0;
+            words[2] <= '0;
+            words[3] <= '0;
         end else begin
             words[0] <= ram[addr];
             words[1] <= ram[addr+1];
@@ -57,8 +60,8 @@ module SA_Cache(
     //16 blocks x 4 words = 64 total words
     //each set is 4 blocks
 
-    typedef struct packed {
-        logic [31:0] block[BLOCK_WORDS];
+    typedef struct packed{
+        logic [BLOCK_WORDS-1:0][31:0] block;
         logic [TAG_SIZE-1:0] tag;
         logic valid;
         logic dirty;
@@ -68,17 +71,27 @@ module SA_Cache(
     logic [1:0] word_offset;
     logic [1:0] index;
     logic [TAG_SIZE-1:0] tag;
+    
+    logic way0_hit, way1_hit, way2_hit, way3_hit;
+    logic [1:0] hit_way; // which way hit?
 
     cache_way_t cache [NUM_SETS][NUM_WAYS];
 
     logic queue_we[NUM_SETS];
-    logic queue_lru[NUM_SETS];
+    logic [1:0] queue_lru[NUM_SETS];
     PRIO_Q queues[NUM_SETS](.CLK(CLK), .we(queue_we), .in(hit_way), .lru(queue_lru));
 
-    assign queue_we = (hit) ? 1 << hit_way : '0;
+    assign queue_we[0] = (hit) ? index == 0 : 0;
+    assign queue_we[1] = (hit) ? index == 1 : 0;
+    assign queue_we[2] = (hit) ? index == 2 : 0;
+    assign queue_we[3] = (hit) ? index == 3 : 0;
 
     initial begin
-        cache <= 0;
+        for (int i = 0; i < NUM_SETS; i++) begin
+            for (int j = 0; j < NUM_WAYS; j++) begin
+                cache[i][j] = '0;
+            end
+        end
     end
 
     assign byte_offset = addr[1:0];
@@ -86,8 +99,6 @@ module SA_Cache(
     assign index = addr[5:4];
     assign tag = addr[31:6];
 
-    logic way0_hit, way1_hit, way2_hit, way3_hit;
-    logic [1:0] hit_way; // which way hit?
 
     assign way0_hit = cache[index][0].valid && cache[index][0].tag == tag;
     assign way1_hit = cache[index][1].valid && cache[index][1].tag == tag;
@@ -111,23 +122,6 @@ module SA_Cache(
         if (hit) rd = cache[index][hit_way].block[word_offset];
     end
 
-    always_ff @(negedge CLK) begin
-        if (cache_we && hit) begin
-            case({mem_size,mem_byte_offset})
-                4'b0000: cache[index][hit_way].block[word_offset][7:0]   <= mem_din[7:0];     // sb at byte offsets
-                4'b0001: cache[index][hit_way].block[word_offset][15:8]  <= mem_din[7:0];
-                4'b0010: cache[index][hit_way].block[word_offset][23:16] <= mem_din[7:0];
-                4'b0011: cache[index][hit_way].block[word_offset][31:24] <= mem_din[7:0];
-                4'b0100: cache[index][hit_way].block[word_offset][15:0]  <= mem_din[15:0];     // sh at byte offsets
-                4'b0101: cache[index][hit_way].block[word_offset][23:8]  <= mem_din[15:0];
-                4'b0110: cache[index][hit_way].block[word_offset][31:16] <= mem_din[15:0];
-                4'b1000: cache[index][hit_way].block[word_offset] <= mem_din;                  // sw
-            endcase
-
-            cache[index][hit_way].dirty <= 1;
-        end
-    end
-
     assign mem_wb = update && cache[index][queue_lru[index]].dirty;
     assign wb_addr = {cache[index][queue_lru[index]].tag, index, 4'b0000};
     assign wb_words[0] = cache[index][queue_lru[index]].block[0];
@@ -140,10 +134,23 @@ module SA_Cache(
             cache[index][queue_lru[index]].valid <= 1;
             cache[index][queue_lru[index]].dirty <= 0;
             cache[index][queue_lru[index]].tag <= tag;
-            cache[index][queue_lru[index]].block[0] <= w0;
-            cache[index][queue_lru[index]].block[1] <= w1;
-            cache[index][queue_lru[index]].block[2] <= w2;
-            cache[index][queue_lru[index]].block[3] <= w3;
+            cache[index][queue_lru[index]].block[0] <= words[0];
+            cache[index][queue_lru[index]].block[1] <= words[1];
+            cache[index][queue_lru[index]].block[2] <= words[2];
+            cache[index][queue_lru[index]].block[3] <= words[3];
+        end else if (cache_we && hit) begin
+            case({mem_size,mem_byte_offset})
+                4'b0000: cache[index][hit_way].block[word_offset][7:0]   <= mem_din[7:0];     // sb at byte offsets
+                4'b0001: cache[index][hit_way].block[word_offset][15:8]  <= mem_din[7:0];
+                4'b0010: cache[index][hit_way].block[word_offset][23:16] <= mem_din[7:0];
+                4'b0011: cache[index][hit_way].block[word_offset][31:24] <= mem_din[7:0];
+                4'b0100: cache[index][hit_way].block[word_offset][15:0]  <= mem_din[15:0];     // sh at byte offsets
+                4'b0101: cache[index][hit_way].block[word_offset][23:8]  <= mem_din[15:0];
+                4'b0110: cache[index][hit_way].block[word_offset][31:16] <= mem_din[15:0];
+                4'b1000: cache[index][hit_way].block[word_offset] <= mem_din;                  // sw
+            endcase
+
+            cache[index][hit_way].dirty <= 1;
         end
     end
 endmodule

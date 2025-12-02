@@ -394,8 +394,7 @@ module OTTER(
     assign size = ex_pipe_reg.mem_type[1:0];
     
     // the Memory module and connect relevant I/O    
-    Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 
-        .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(pc_out), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
+    Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(pc_out), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
          .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .RST(RST), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2), .PC_STALL(cache_pc_stall), .DCACHE_STALL(dcache_stall));
 
     always_ff @(posedge CLK) begin

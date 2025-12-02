@@ -58,7 +58,7 @@ module Memory (
   output logic IO_WR,     // IO 1-write 0-read
   output logic [31:0] MEM_DOUT1,  // Instruction
   output logic [31:0] MEM_DOUT2, // Data
-  output logic PC_STALL
+  output logic PC_STALL,
   output logic DCACHE_STALL
   );
   

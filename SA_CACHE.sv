@@ -34,6 +34,7 @@ endmodule
 
 module SA_Cache(
     input CLK,
+    input MEM_RDEN,
     input update,
     input logic [31:0] addr,
     input logic [31:0] words [4],
@@ -106,7 +107,7 @@ module SA_Cache(
     assign way3_hit = cache[index][3].valid && cache[index][3].tag == tag;
 
     assign hit = way0_hit | way1_hit | way2_hit | way3_hit;
-    assign miss = !hit;
+    assign miss = !hit && MEM_RDEN;
 
     always_comb begin
         if (way0_hit)      hit_way = 2'd0;

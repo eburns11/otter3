@@ -47,6 +47,7 @@
                                                                                                                             
 module Memory (
   input MEM_CLK,
+  input MEM2_READ_EN,
   input MEM_WE2,          // write enable.
   input [31:0] MEM_ADDR1, // Instruction Memory word Addr (Connect to PC[15:2])
   input [31:0] MEM_ADDR2, // Data Memory Addr
@@ -87,7 +88,7 @@ module Memory (
 
   //we need to find a stall method other than pc, this won't work. Do we need to stall the entire pipeline?
   CacheFSM DMEM_FSM(.hit(dcache_hit), .miss(dcache_miss), .CLK(MEM_CLK), .RST(RST), .update(dcache_update), .pc_stall(dcache_pc_stall));
-  SA_Cache DCACHE(.CLK(MEM_CLK), .update(dcache_update), .addr(MEM_ADDR2), .words(dcache_words), .cache_we(MEM_WE2), .mem_din(MEM_DIN2), .mem_size(MEM_SIZE), .mem_byte_offset(byteOffset),
+  SA_Cache DCACHE(.CLK(MEM_CLK), .MEM_RDEN(MEM2_READ_EN), .update(dcache_update), .addr(MEM_ADDR2), .words(dcache_words), .cache_we(MEM_WE2), .mem_din(MEM_DIN2), .mem_size(MEM_SIZE), .mem_byte_offset(byteOffset),
                   .rd(dcache_out), .mem_wb(dcache_we), .wb_words(dcache_wb_words), .wb_addr(dcache_wb_addr), .hit(dcache_hit), .miss(dcache_miss));
   
   assign PC_STALL = icache_pc_stall | dcache_pc_stall;

@@ -66,6 +66,7 @@ module OTTER(
         mem_pipe_reg <= '0; // P4
     end
 
+    logic mem2_read_en;
     logic [31:0] wb_data;
     logic pc_rst;
     logic [31:0] ir;
@@ -392,9 +393,11 @@ module OTTER(
     assign sign = ex_pipe_reg.mem_type[2];
     logic [1:0] size;
     assign size = ex_pipe_reg.mem_type[1:0];
+
+    assign mem2_read_en = ex_pipe_reg.opcode == LOAD;
     
     // the Memory module and connect relevant I/O    
-    Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(pc_out), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
+    Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM2_READ_EN(mem2_read_en), .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(pc_out), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
          .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .RST(RST), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2), .PC_STALL(cache_pc_stall), .DCACHE_STALL(dcache_stall));
 
     always_ff @(posedge CLK) begin

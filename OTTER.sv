@@ -87,6 +87,7 @@ module OTTER(
     logic stall;
     logic [31:0] dout2;
     logic cache_pc_stall;
+    logic dcache_stall;
     
     //NOTE ABOUT METHODOLOGY FOR CREATING TOP-LEVEL MODULE:
     //I decided to look at the OTTER diagram and create logic (connecting wires)
@@ -338,6 +339,9 @@ module OTTER(
     always_ff @(posedge CLK) begin
         if ((ex_det_fwd != 2'b00) && (ex_pipe_reg.opcode == LOAD) && ex_pipe_reg.regWrite && !ex_pipe_reg.flush) begin  //if raw from ex stage and it is a load, stall the pipeline
             stall = 1'b1;
+        end 
+        else if (dcache_stall) begin
+            stall = 1'b1;
         end
         else begin
             stall = 1'b0;
@@ -392,7 +396,7 @@ module OTTER(
     // the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM_RDEN1(mem_rden1), .MEM_RDEN2(mem_rden2), 
         .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(pc_out), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
-         .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .RST(RST), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2), .PC_STALL(cache_pc_stall));
+         .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .RST(RST), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2), .PC_STALL(cache_pc_stall), .DCACHE_STALL(dcache_stall));
 
     always_ff @(posedge CLK) begin
         if (RST) begin

@@ -58,7 +58,9 @@ module Memory (
   output logic IO_WR,     // IO 1-write 0-read
   output logic [31:0] MEM_DOUT1,  // Instruction
   output logic [31:0] MEM_DOUT2, // Data
-  output logic PC_STALL);
+  output logic PC_STALL
+  output logic DCACHE_STALL
+  );
   
   logic [31:0] memReadWord, ioBuffer, memReadSized;
   logic [1:0] byteOffset;
@@ -90,7 +92,7 @@ module Memory (
                   .rd(dcache_out), .mem_wb(dcache_we), .wb_words(dcache_wb_words), .wb_addr(dcache_wb_addr), .hit(dcache_hit), .miss(dcache_miss));
   
   assign PC_STALL = icache_pc_stall | dcache_pc_stall;
-
+  assign DCACHE_STALL = dcache_miss;
   
           
   // buffer the IO input for reading

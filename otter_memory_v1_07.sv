@@ -75,15 +75,19 @@ module Memory (
 
   logic [31:0] dcache_words [4];
   logic [31:0] dcache_wb_words [4];
+  logic [31:0] dcache_wb_addr;
   logic dcache_we;
-  dmem DATA_MEMORY(.CLK(MEM_CLK), .a(MEM_ADDR2), .we(dcache_we), .wb_words(dcache_wb_words), .words(dcache_words));
+
+  logic [31:0] dmem_addr;
+  assign dmem_addr = (dcache_we) ? dcache_wb_addr : MEM_ADDR2;
+  dmem DATA_MEMORY(.CLK(MEM_CLK), .a(dmem_addr), .we(dcache_we), .wb_words(dcache_wb_words), .words(dcache_words));
   logic dcache_hit, dcache_miss, dcache_update, dcache_pc_stall;
   logic [31:0] dcache_out;
 
   //we need to find a stall method other than pc, this won't work. Do we need to stall the entire pipeline?
   CacheFSM DMEM_FSM(.hit(dcache_hit), .miss(dcache_miss), .CLK(MEM_CLK), .RST(RST), .update(dcache_update), .pc_stall(dcache_pc_stall));
   SA_Cache DCACHE(.CLK(MEM_CLK), .update(dcache_update), .addr(MEM_ADDR2), .words(dcache_words), .cache_we(MEM_WE2), .mem_din(MEM_DIN2), .mem_size(MEM_SIZE), .mem_byte_offset(byteOffset),
-                  .rd(dcache_out), .mem_wb(dcache_we), .wb_words(dcache_wb_words), .hit(dcache_hit), .miss(dcache_miss));
+                  .rd(dcache_out), .mem_wb(dcache_we), .wb_words(dcache_wb_words), .wb_addr(dcache_wb_addr), .hit(dcache_hit), .miss(dcache_miss));
   
   assign PC_STALL = icache_pc_stall | dcache_pc_stall;
 

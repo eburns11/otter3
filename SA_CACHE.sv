@@ -8,7 +8,7 @@ module dmem(
 
     logic [31:0] ram[0:4079];
     logic [31:0] addr;
-    assign addr = {a[31:4], 2'b00}; //fixed for 4 words at a time, not 8
+    assign addr = {2'b00, a[31:4], 2'b00}; //fixed for 4 words at a time, not 8
     initial $readmemh("../hdl/performance.mem", ram, 0, 4079);
 
     always_ff @(negedge CLK) begin
@@ -41,6 +41,7 @@ module SA_Cache(
     output logic [31:0] rd,
     output logic mem_wb,
     output logic [31:0] wb_words [4],
+    output logic [31:0] wb_addr,
     output logic hit,
     output logic miss
     );
@@ -111,7 +112,7 @@ module SA_Cache(
     end
 
     always_ff @(negedge CLK) begin
-        if (cache_we) begin
+        if (cache_we && hit) begin
             case({mem_size,mem_byte_offset})
                 4'b0000: cache[index][hit_way].block[word_offset][7:0]   <= mem_din[7:0];     // sb at byte offsets
                 4'b0001: cache[index][hit_way].block[word_offset][15:8]  <= mem_din[7:0];
@@ -123,11 +124,12 @@ module SA_Cache(
                 4'b1000: cache[index][hit_way].block[word_offset] <= mem_din;                  // sw
             endcase
 
-            cache[index][cache_write_location].dirty <= 1;
+            cache[index][hit_way].dirty <= 1;
         end
     end
 
     assign mem_wb = update && cache[index][queue_lru[index]].dirty;
+    assign wb_addr = {cache[index][queue_lru[index]].tag, index, 4'b0000};
     assign wb_words[0] = cache[index][queue_lru[index]].block[0];
     assign wb_words[1] = cache[index][queue_lru[index]].block[1];
     assign wb_words[2] = cache[index][queue_lru[index]].block[2];

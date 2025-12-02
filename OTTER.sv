@@ -147,11 +147,6 @@ module OTTER(
 
     logic[2:0] pc_source_unstable; // can be modified by flushed instructions
 
-    //assign reg_adr1 = if_pipe_reg.ir[19:15];
-    //assign reg_adr2 = if_pipe_reg.ir[24:20];
-    //assign reg_wa = mem_pipe_reg.ir[11:7];
-    //assign imgen_ir = if_pipe_reg.ir[31:7];
-
     always_ff @(posedge CLK) begin
         if (RST) begin
             de_pipe_reg <= 0;
@@ -361,14 +356,6 @@ module OTTER(
 
     PC_SRC_DCDR PC_SRC_DCDR(.IR_OPCODE(de_pipe_reg.opcode), .IR_FUNCT(de_pipe_reg.mem_type), .BR_EQ(br_eq), .BR_LT(br_lt), .BR_LTU(br_ltu), .PC_SOURCE(pc_source_unstable));
 
-    //Instantiate Branch Address Generator, connect all relevant I/O    
-    //BAG OTTER_BAG(.RS1(de_pipe_reg.rs1_data), .I_TYPE(de_pipe_reg.immediate), .J_TYPE(de_pipe_reg.immediate), .B_TYPE(de_pipe_reg.immediate), .FROM_PC(de_pipe_reg.pc_inc),
-    //     .JAL(jal), .JALR(jalr), .BRANCH(branch));
-
-    //ImmediateGenerator OTTER_IMGEN(.IR(if_pipe_reg.ir[31:7]), .U_TYPE(Utype), .I_TYPE(Itype), .S_TYPE(Stype),
-    //    .B_TYPE(Btype), .J_TYPE(Jtype));
-    //getting data late before
-
     always_comb begin
         if (!de_pipe_reg.flush) begin
             pc_source = pc_source_unstable;
@@ -413,7 +400,6 @@ module OTTER(
 //////////////////////////////////////////////////
 // Writeback
 
-
     //wb mux
     always_comb begin 
         case (mem_pipe_reg.rf_wr_sel)
@@ -423,12 +409,6 @@ module OTTER(
             3: wb_data = mem_pipe_reg.alu_result; //ALU
             default: wb_data = 0;
         endcase
-    end
-    
-//Instantiate RegFile Mux, connect all relevant I/O
-//    FourMux OTTER_REG_MUX(.SEL(rf_wr_sel), .ZERO(pc_out_inc), .ONE(32'b0), .TWO(dout2), .THREE(IOBUS_ADDR),
-//        .OUT(wd));
-    
-    
+    end 
     
 endmodule

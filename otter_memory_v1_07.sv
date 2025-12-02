@@ -62,10 +62,9 @@ module Memory (
   output logic DCACHE_STALL
   );
   
-  logic [31:0] memReadWord, ioBuffer, memReadSized;
+  logic [31:0] memReadSized;
   logic [1:0] byteOffset;
   assign byteOffset = MEM_ADDR2[1:0];     // byte offset of memory address
-  logic weAddrValid;      // active when saving (WE) to valid memory address
 
   logic [31:0] icache_words [8];
   imem INSTR_MEMORY(.a(MEM_ADDR1), .words(icache_words));
@@ -93,62 +92,32 @@ module Memory (
   
   assign PC_STALL = icache_pc_stall | dcache_pc_stall;
   assign DCACHE_STALL = dcache_miss;
-  
-          
-  // buffer the IO input for reading
-  always_ff @(negedge MEM_CLK) begin
-    if(MEM_RDEN2)
-      ioBuffer <= IO_IN;
-  end
-
-  
-  // BRAM requires all reads and writes to occur synchronously
-  always_ff @(negedge MEM_CLK) begin
-    if (MEM_RDEN2)                       // Read word from memory
-      memReadWord <= memory[wordAddr2];
-      
-  end
       
   // Change the data word into sized bytes and sign extend
   always_comb begin
     case({MEM_SIGN,MEM_SIZE,byteOffset})
-      5'b00011: memReadSized = {{24{memReadWord[31]}},memReadWord[31:24]};  // signed byte
-      5'b00010: memReadSized = {{24{memReadWord[23]}},memReadWord[23:16]};
-      5'b00001: memReadSized = {{24{memReadWord[15]}},memReadWord[15:8]};
-      5'b00000: memReadSized = {{24{memReadWord[7]}},memReadWord[7:0]};
+      5'b00011: memReadSized = {{24{dcache_out[31]}},dcache_out[31:24]};  // signed byte
+      5'b00010: memReadSized = {{24{dcache_out[23]}},dcache_out[23:16]};
+      5'b00001: memReadSized = {{24{dcache_out[15]}},dcache_out[15:8]};
+      5'b00000: memReadSized = {{24{dcache_out[7]}},dcache_out[7:0]};
                                   
-      5'b00110: memReadSized = {{16{memReadWord[31]}},memReadWord[31:16]};  // signed half
-      5'b00101: memReadSized = {{16{memReadWord[23]}},memReadWord[23:8]};
-      5'b00100: memReadSized = {{16{memReadWord[15]}},memReadWord[15:0]};
+      5'b00110: memReadSized = {{16{dcache_out[31]}},dcache_out[31:16]};  // signed half
+      5'b00101: memReadSized = {{16{dcache_out[23]}},dcache_out[23:8]};
+      5'b00100: memReadSized = {{16{dcache_out[15]}},dcache_out[15:0]};
           
-      5'b01000: memReadSized = memReadWord;                   // word
+      5'b01000: memReadSized = dcache_out;                   // word
               
-      5'b10011: memReadSized = {24'd0,memReadWord[31:24]};    // unsigned byte
-      5'b10010: memReadSized = {24'd0,memReadWord[23:16]};
-      5'b10001: memReadSized = {24'd0,memReadWord[15:8]};
-      5'b10000: memReadSized = {24'd0,memReadWord[7:0]};
+      5'b10011: memReadSized = {24'd0,dcache_out[31:24]};    // unsigned byte
+      5'b10010: memReadSized = {24'd0,dcache_out[23:16]};
+      5'b10001: memReadSized = {24'd0,dcache_out[15:8]};
+      5'b10000: memReadSized = {24'd0,dcache_out[7:0]};
               
-      5'b10110: memReadSized = {16'd0,memReadWord[31:16]};    // unsigned half
-      5'b10101: memReadSized = {16'd0,memReadWord[23:8]};
-      5'b10100: memReadSized = {16'd0,memReadWord[15:0]};
+      5'b10110: memReadSized = {16'd0,dcache_out[31:16]};    // unsigned half
+      5'b10101: memReadSized = {16'd0,dcache_out[23:8]};
+      5'b10100: memReadSized = {16'd0,dcache_out[15:0]};
           
       default:  memReadSized = 32'b0;     // unsupported size, byte offset combination
     endcase
-  end
-
-  //lowk wanna just forget mmio because I dont think its an expected use case
-  // Memory Mapped IO 
-  always_comb begin
-    if(MEM_ADDR2 >= 32'h00010000) begin  // external address range
-      IO_WR = MEM_WE2;                 // IO Write
-      MEM_DOUT2 = ioBuffer;            // IO read from buffer
-      weAddrValid = 0;                 // address beyond memory range
-    end
-    else begin
-      IO_WR = 0;                  // not MMIO
-      MEM_DOUT2 = memReadSized;   // output sized and sign extended data
-      weAddrValid = MEM_WE2;      // address in valid memory range
-    end
   end
       
 endmodule

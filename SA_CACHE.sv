@@ -73,9 +73,9 @@ module SA_Cache(
 
     logic queue_we[NUM_SETS];
     logic queue_lru[NUM_SETS];
-    PRIO_Q queues[NUM_SETS](.CLK(CLK), .we(queue_we), .in(index), .lru(queue_lru));
+    PRIO_Q queues[NUM_SETS](.CLK(CLK), .we(queue_we), .in(hit_way), .lru(queue_lru));
 
-    assign queue_we = (hit) ? 1 << index : '0;
+    assign queue_we = (hit) ? 1 << hit_way : '0;
 
     initial begin
         cache <= 0;

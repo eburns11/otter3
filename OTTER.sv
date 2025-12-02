@@ -402,7 +402,7 @@ module OTTER(
         if (RST) begin
             mem_pipe_reg <= 0;
         end
-        else begin
+        else if (~dcache_stall) begin
             mem_pipe_reg <= ex_pipe_reg;
             mem_pipe_reg.mem_rdata <= dout2;
         end

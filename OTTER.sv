@@ -85,10 +85,12 @@ module OTTER(
     logic [31:0] srcA, srcB;
     logic br_eq, br_lt, br_ltu;
     logic [31:0] Utype, Itype, Stype, Btype, Jtype;
-    logic stall;
     logic [31:0] dout2;
-    logic cache_pc_stall;
-    logic dcache_stall;
+    logic stall;
+    logic pipe_stall;
+    logic cache_stall;
+
+    assign stall = pipe_stall || cache_stall;
     
     //NOTE ABOUT METHODOLOGY FOR CREATING TOP-LEVEL MODULE:
     //I decided to look at the OTTER diagram and create logic (connecting wires)
@@ -124,7 +126,7 @@ module OTTER(
     end
     
     logic pc_write;
-    assign pc_write = ~stall & ~(cache_pc_stall & (pc_source == 3'b000));
+    assign pc_write = !stall;
     //Instantiate the PC and connect relevant I/O
     PC OTTER_PC(.CLK(CLK), .RST(pc_rst), .PC_WRITE(pc_write), .PC_SOURCE(pc_source),
         .JALR(jalr), .JAL(jal), .BRANCH(branch), .MTVEC(32'b0), .MEPC(32'b0),
@@ -274,7 +276,7 @@ module OTTER(
     end
 
     always_ff @(posedge CLK) begin
-        if (RST || stall) begin
+        if (RST || pipe_stall) begin
             ex_pipe_reg <= 0;
         end
         else if (!stall) begin
@@ -334,13 +336,10 @@ module OTTER(
 
     always_ff @(posedge CLK) begin
         if ((ex_det_fwd != 2'b00) && (ex_pipe_reg.opcode == LOAD) && ex_pipe_reg.regWrite && !ex_pipe_reg.flush) begin  //if raw from ex stage and it is a load, stall the pipeline
-            stall = 1'b1;
-        end 
-        else if (dcache_stall) begin
-            stall = 1'b1;
+            pipe_stall <= 1'b1;
         end
         else begin
-            stall = 1'b0;
+            pipe_stall <= 1'b0;
         end
     end
     
@@ -381,17 +380,17 @@ module OTTER(
     logic [1:0] size;
     assign size = ex_pipe_reg.mem_type[1:0];
 
-    assign mem2_read_en = ex_pipe_reg.opcode == LOAD;
+    assign mem2_read_en = (ex_pipe_reg.opcode == LOAD) || (ex_pipe_reg.opcode == STORE);
     
     // the Memory module and connect relevant I/O    
     Memory OTTER_MEMORY(.MEM_CLK(CLK), .MEM2_READ_EN(mem2_read_en), .MEM_WE2(ex_pipe_reg.memWrite && !ex_pipe_reg.flush), .MEM_ADDR1(pc_out), .MEM_ADDR2(ex_pipe_reg.alu_result), .MEM_DIN2(ex_pipe_reg.rs2_data), .MEM_SIZE(size),
-         .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .RST(RST), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2), .PC_STALL(cache_pc_stall), .DCACHE_STALL(dcache_stall));
+         .MEM_SIGN(sign), .IO_IN(IOBUS_IN), .RST(RST), .IO_WR(IOBUS_WR), .MEM_DOUT1(ir), .MEM_DOUT2(dout2), .STALL(cache_stall));
 
     always_ff @(posedge CLK) begin
         if (RST) begin
             mem_pipe_reg <= 0;
         end
-        else if (~dcache_stall) begin
+        else if (!cache_stall) begin
             mem_pipe_reg <= ex_pipe_reg;
             mem_pipe_reg.mem_rdata <= dout2;
         end

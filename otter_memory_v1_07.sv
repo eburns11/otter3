@@ -59,19 +59,21 @@ module Memory (
   output logic IO_WR,     // IO 1-write 0-read
   output logic [31:0] MEM_DOUT1,  // Instruction
   output logic [31:0] MEM_DOUT2, // Data
-  output logic PC_STALL,
-  output logic DCACHE_STALL
+  output logic STALL
   );
   
   logic [31:0] memReadSized;
   logic [1:0] byteOffset;
   assign byteOffset = MEM_ADDR2[1:0];     // byte offset of memory address
 
+  assign IO_WR = 0;
+  assign MEM_DOUT2 = memReadSized;
+
   logic [31:0] icache_words [8];
   imem INSTR_MEMORY(.a(MEM_ADDR1), .words(icache_words));
-  logic icache_hit, icache_miss, icache_update, icache_pc_stall;
+  logic icache_hit, icache_miss, icache_update;
 
-  CacheFSM IMEM_FSM(.hit(icache_hit), .miss(icache_miss), .CLK(MEM_CLK), .RST(RST), .update(icache_update), .pc_stall(icache_pc_stall));
+  CacheFSM IMEM_FSM(.hit(icache_hit), .miss(icache_miss), .update(icache_update));
   DM_Cache ICACHE(.PC(MEM_ADDR1), .CLK(MEM_CLK), .update(icache_update), .words(icache_words),
                   .rd(MEM_DOUT1), .hit(icache_hit), .miss(icache_miss));
 
@@ -83,16 +85,15 @@ module Memory (
   logic [31:0] dmem_addr;
   assign dmem_addr = (dcache_we) ? dcache_wb_addr : MEM_ADDR2;
   dmem DATA_MEMORY(.CLK(MEM_CLK), .a(dmem_addr), .we(dcache_we), .wb_words(dcache_wb_words), .words(dcache_words));
-  logic dcache_hit, dcache_miss, dcache_update, dcache_pc_stall;
+  logic dcache_hit, dcache_miss, dcache_update, dcache_stall, dcache_write;
   logic [31:0] dcache_out;
 
   //we need to find a stall method other than pc, this won't work. Do we need to stall the entire pipeline?
-  CacheFSM DMEM_FSM(.hit(dcache_hit), .miss(dcache_miss), .CLK(MEM_CLK), .RST(RST), .update(dcache_update), .pc_stall(dcache_pc_stall));
-  SA_Cache DCACHE(.CLK(MEM_CLK), .MEM_RDEN(MEM2_READ_EN), .update(dcache_update), .addr(MEM_ADDR2), .words(dcache_words), .cache_we(MEM_WE2), .mem_din(MEM_DIN2), .mem_size(MEM_SIZE), .mem_byte_offset(byteOffset),
+  SA_FSM DMEM_FSM(.hit(dcache_hit), .miss(dcache_miss), .we(MEM_WE2), .CLK(MEM_CLK), .RST(RST), .update(dcache_update), .stall(dcache_stall), .write(dcache_write));
+  SA_Cache DCACHE(.CLK(MEM_CLK), .MEM_RDEN(MEM2_READ_EN), .update(dcache_update), .addr(MEM_ADDR2), .words(dcache_words), .cache_we(dcache_write), .mem_din(MEM_DIN2), .mem_size(MEM_SIZE), .mem_byte_offset(byteOffset),
                   .rd(dcache_out), .mem_wb(dcache_we), .wb_words(dcache_wb_words), .wb_addr(dcache_wb_addr), .hit(dcache_hit), .miss(dcache_miss));
   
-  assign PC_STALL = icache_pc_stall | dcache_pc_stall;
-  assign DCACHE_STALL = dcache_miss;
+  assign STALL = dcache_stall;
       
   // Change the data word into sized bytes and sign extend
   always_comb begin

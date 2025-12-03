@@ -32,6 +32,41 @@ module dmem(
 
 endmodule
 
+module SA_FSM(input hit, input miss, input we, input CLK, input RST, output logic update, output logic stall, output logic write);
+    typedef enum{
+        ST_READ_CACHE,
+        ST_WRITE_CACHE
+    } state_type;
+    state_type PS, NS;
+    always_ff @(posedge CLK) begin
+    if(RST == 1)
+        PS <= ST_READ_CACHE;
+    else
+        PS <= NS;
+    end
+
+    assign update = miss;
+    always_comb begin
+        stall = 1'b0;
+        write = 1'b0;
+        case (PS)
+        ST_READ_CACHE: begin
+            if (we) begin
+                NS = ST_WRITE_CACHE;
+                stall = 1'b1;
+            end else begin
+                NS = ST_READ_CACHE;
+            end
+        end
+        ST_WRITE_CACHE: begin
+            NS = ST_READ_CACHE;
+            write = 1'b1;
+        end
+        default: NS = ST_READ_CACHE;
+        endcase
+    end
+endmodule
+
 module SA_Cache(
     input CLK,
     input MEM_RDEN,
@@ -107,7 +142,7 @@ module SA_Cache(
     assign way3_hit = cache[index][3].valid && cache[index][3].tag == tag;
 
     assign hit = way0_hit | way1_hit | way2_hit | way3_hit;
-    assign miss = !hit && MEM_RDEN;
+    assign miss = !hit && (MEM_RDEN || cache_we);
 
     always_comb begin
         if (way0_hit)      hit_way = 2'd0;
@@ -131,7 +166,7 @@ module SA_Cache(
     assign wb_words[3] = cache[index][queue_lru[index]].block[3];
 
     always_ff @(negedge CLK) begin
-        if(update) begin
+        if (update) begin
             cache[index][queue_lru[index]].valid <= 1;
             cache[index][queue_lru[index]].dirty <= 0;
             cache[index][queue_lru[index]].tag <= tag;
